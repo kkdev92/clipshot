@@ -89,11 +89,20 @@ export function containsParentTraversal(inputPath: string): boolean {
 
 /**
  * Check if a path is absolute
+ * Handles both Unix and Windows paths regardless of current platform
  *
  * @param inputPath - The path to check
  * @returns True if path is absolute
  */
 export function isAbsolutePath(inputPath: string): boolean {
+  // Unix absolute path
+  if (inputPath.startsWith('/')) {
+    return true;
+  }
+  // Windows absolute path (e.g., C:\, D:\)
+  if (/^[A-Za-z]:[/\\]/.test(inputPath)) {
+    return true;
+  }
   return path.isAbsolute(inputPath);
 }
 

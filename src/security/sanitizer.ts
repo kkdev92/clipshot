@@ -133,18 +133,14 @@ export function containsDangerousChars(input: string): boolean {
  * @returns Sanitized directory path
  */
 export function sanitizeDirectoryPath(dirPath: string): string {
-  const platform = getPlatform();
   let sanitized = dirPath;
 
   // Remove control characters
   // eslint-disable-next-line no-control-regex
   sanitized = sanitized.replace(/[\x00-\x1f\x7f-\x9f]/g, '');
 
-  // Normalize path separators
-  if (platform === 'win32') {
-    // Allow both / and \ on Windows, normalize to /
-    sanitized = sanitized.replace(/\\/g, '/');
-  }
+  // Normalize path separators (always convert backslashes to forward slashes)
+  sanitized = sanitized.replace(/\\/g, '/');
 
   // Remove consecutive separators
   sanitized = sanitized.replace(/\/+/g, '/');
