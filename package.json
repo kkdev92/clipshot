@@ -1,0 +1,194 @@
+{
+  "name": "clipshot",
+  "displayName": "ClipShot",
+  "description": "Paste clipboard images with automatic file saving - perfect for AI chat and documentation",
+  "version": "0.1.0",
+  "publisher": "kkdev92",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kkdev92/clipshot"
+  },
+  "bugs": {
+    "url": "https://github.com/kkdev92/clipshot/issues"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "image",
+    "paste",
+    "clipboard",
+    "screenshot",
+    "ai",
+    "markdown"
+  ],
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "clipshot.pasteImage",
+        "title": "ClipShot: Paste Image"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "clipshot.pasteImage",
+        "key": "ctrl+shift+v",
+        "mac": "cmd+shift+v"
+      }
+    ],
+    "configuration": {
+      "title": "ClipShot",
+      "properties": {
+        "clipshot.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable the extension"
+        },
+        "clipshot.logLevel": {
+          "type": "string",
+          "default": "info",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error",
+            "silent"
+          ],
+          "description": "Log level for the extension"
+        },
+        "clipshot.saveDirectory": {
+          "type": "string",
+          "default": ".clipshot",
+          "description": "Directory to save images (relative to workspace root)"
+        },
+        "clipshot.fileName.pattern": {
+          "type": "string",
+          "default": "image_${yyyy}${MM}${dd}_${HH}${mm}${ss}_${seq3}",
+          "description": "File name pattern for saved images"
+        },
+        "clipshot.fileName.sequenceDigits": {
+          "type": "integer",
+          "default": 3,
+          "minimum": 1,
+          "maximum": 6,
+          "description": "Number of digits for sequence number"
+        },
+        "clipshot.output.format": {
+          "type": "string",
+          "default": "png",
+          "enum": [
+            "png",
+            "jpeg",
+            "webp"
+          ],
+          "description": "Output image format"
+        },
+        "clipshot.output.jpegQuality": {
+          "type": "integer",
+          "default": 80,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "JPEG quality (1-100)"
+        },
+        "clipshot.output.webpQuality": {
+          "type": "integer",
+          "default": 80,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "WebP quality (1-100)"
+        },
+        "clipshot.insert.format": {
+          "type": "string",
+          "default": "path",
+          "enum": [
+            "path",
+            "markdown",
+            "html"
+          ],
+          "description": "Format for inserted text"
+        },
+        "clipshot.insert.altSource": {
+          "type": "string",
+          "default": "filename",
+          "enum": [
+            "filename",
+            "literal"
+          ],
+          "description": "Source for alt text in markdown/html"
+        },
+        "clipshot.insert.altLiteral": {
+          "type": "string",
+          "default": "image",
+          "description": "Custom alt text when altSource is 'literal'"
+        },
+        "clipshot.limits.maxFileSizeMB": {
+          "type": "integer",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Maximum file size in MB"
+        },
+        "clipshot.notifications.level": {
+          "type": "string",
+          "default": "all",
+          "enum": [
+            "all",
+            "errors",
+            "none"
+          ],
+          "description": "Notification level"
+        }
+      }
+    }
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "This extension requires a trusted workspace to save images"
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run bundle:prod",
+    "bundle": "node esbuild.mjs",
+    "bundle:prod": "node esbuild.mjs --production",
+    "bundle:watch": "node esbuild.mjs --watch",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "package": "vsce package",
+    "clean": "rimraf dist out"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.0.0",
+    "esbuild": "^0.27.2",
+    "eslint": "^9.0.0",
+    "rimraf": "^6.0.0",
+    "typescript": "^5.4.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "@kkdev92/vscode-ext-kit": "^0.1.1",
+    "sharp": "^0.34.0"
+  }
+}

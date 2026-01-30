@@ -1,0 +1,47 @@
+# Source files (bundled to dist/)
+src/**
+test/**
+
+# Development files
+.vscode/**
+.claude/**
+.git/**
+.gitignore
+*.ts
+tsconfig.json
+eslint.config.mjs
+vitest.config.ts
+esbuild.mjs
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Build artifacts - only keep bundled extension and sharp native modules
+node_modules/**
+!node_modules/sharp/**
+!node_modules/@img/**
+work/**
+
+# Documentation (keep README)
+CONTRIBUTING.md
+SECURITY.md
+docs/**
+
+# Other
+.mcp.json
+*.vsix
+*.map
+.clipshot/**
+
+# Old tsc output (only keep bundled extension.js)
+dist/**/*.d.ts
+dist/**/*.d.ts.map
+dist/clipboard/**
+dist/config/**
+dist/core/**
+dist/detection/**
+dist/image/**
+dist/keyboard/**
+dist/security/**
