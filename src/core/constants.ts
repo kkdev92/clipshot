@@ -43,7 +43,7 @@ export const DEFAULTS = {
   OUTPUT_FORMAT: 'png' as const,
   JPEG_QUALITY: 80,
   WEBP_QUALITY: 80,
-  INSERT_FORMAT: 'path' as const,
+  INSERT_FORMAT: 'auto' as const,
   ALT_SOURCE: 'filename' as const,
   ALT_LITERAL: 'image',
   MAX_FILE_SIZE_MB: 10,

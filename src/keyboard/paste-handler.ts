@@ -13,18 +13,38 @@ import { getClipboardManager } from '../clipboard/clipboard-manager';
 import { ImageProcessor } from '../image/image-processor';
 
 /**
+ * Resolve auto format based on language ID
+ */
+function resolveAutoFormat(languageId?: string): 'path' | 'markdown' | 'html' {
+  switch (languageId) {
+    case 'markdown':
+      return 'markdown';
+    case 'html':
+      return 'html';
+    default:
+      return 'path';
+  }
+}
+
+/**
  * Format the insert text based on configuration
  */
 function formatInsertText(
   processedImage: ProcessedImage,
   format: InsertFormat,
   altSource: AltSource,
-  altLiteral: string
+  altLiteral: string,
+  languageId?: string
 ): string {
   const path = processedImage.relativePath;
   const alt = altSource === 'filename' ? processedImage.fileName : altLiteral;
 
-  switch (format) {
+  // Resolve auto format based on file type
+  const resolvedFormat = format === 'auto'
+    ? resolveAutoFormat(languageId)
+    : format;
+
+  switch (resolvedFormat) {
     case 'markdown':
       return `![${alt}](${path})`;
     case 'html':
@@ -134,7 +154,8 @@ export class PasteHandler {
         processedImage,
         config.insert.format,
         config.insert.altSource,
-        config.insert.altLiteral
+        config.insert.altLiteral,
+        editor?.document.languageId
       );
 
       // Insert text at cursor or copy to clipboard

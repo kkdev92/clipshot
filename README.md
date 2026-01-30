@@ -85,7 +85,10 @@ You can also use the Command Palette: `ClipShot: Paste Image`
 
 ClipShot saves the clipboard image into your workspace and inserts a reference at the cursor.
 
-Tip: If you write lots of markdown, try `clipshot.insert.format = markdown` to insert `![](relative/path.png)`.
+By default (`auto` mode), ClipShot detects the file type and uses the appropriate format:
+- **Markdown files** → `![filename](relative/path.png)`
+- **HTML files** → `<img src="relative/path.png" alt="filename" />`
+- **Other files** → `relative/path.png`
 
 ---
 
@@ -99,7 +102,7 @@ Tip: If you write lots of markdown, try `clipshot.insert.format = markdown` to i
 | `clipshot.output.format`      | `png`                                             | Output format (png/jpeg/webp)      |
 | `clipshot.output.jpegQuality` | `80`                                              | JPEG quality (1-100)               |
 | `clipshot.output.webpQuality` | `80`                                              | WebP quality (1-100)               |
-| `clipshot.insert.format`      | `path`                                            | Insert format (path/markdown/html) |
+| `clipshot.insert.format`      | `auto`                                            | Insert format (auto/path/markdown/html) |
 
 ### File Name Pattern Tokens
 

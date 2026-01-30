@@ -15,7 +15,7 @@ export type ImageFormat = 'png' | 'jpeg' | 'webp';
 /**
  * Insert text format
  */
-export type InsertFormat = 'path' | 'markdown' | 'html';
+export type InsertFormat = 'auto' | 'path' | 'markdown' | 'html';
 
 /**
  * Alt text source

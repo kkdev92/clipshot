@@ -112,11 +112,18 @@
         },
         "clipshot.insert.format": {
           "type": "string",
-          "default": "path",
+          "default": "auto",
           "enum": [
+            "auto",
             "path",
             "markdown",
             "html"
+          ],
+          "enumDescriptions": [
+            "Auto-detect based on file type (Markdown → markdown, HTML → html, others → path)",
+            "Insert file path only",
+            "Insert as Markdown image: ![alt](path)",
+            "Insert as HTML image: <img src=\"path\" alt=\"alt\" />"
           ],
           "description": "Format for inserted text"
         },
