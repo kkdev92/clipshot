@@ -25,7 +25,6 @@ let cachedPowerShellPath: string | null = null;
  * Optimizations applied:
  * - Single Add-Type call loads both assemblies at once
  * - Early exit when no image is present (avoids unnecessary processing)
- * - Direct enum value (1 = ImageFormat.Png) instead of reflection lookup
  */
 const CLIPBOARD_SCRIPT = `
 # Load required .NET assemblies in a single call for faster startup
@@ -46,9 +45,9 @@ if ($image -eq $null) {
     return
 }
 
-# Save image as PNG (enum value 1 = System.Drawing.Imaging.ImageFormat.Png)
+# Save image as PNG
 $tempPath = $env:CLIP_TEMP_PATH
-$image.Save($tempPath, 1)
+$image.Save($tempPath, [System.Drawing.Imaging.ImageFormat]::Png)
 $image.Dispose()
 
 "::RESULT::True,$hasText,$tempPath"
