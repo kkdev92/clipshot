@@ -46,6 +46,9 @@ out/
 .yarn/
 .pnpm-store/
 
+# ===== Testing =====
+coverage/
+
 # ===== IDE =====
 .vscode/
 .idea/

@@ -1,8 +1,9 @@
 # ClipShot
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/kkdev92/clipshot/actions/workflows/ci.yml/badge.svg)](https://github.com/kkdev92/clipshot/actions/workflows/ci.yml)
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/kkdev92.clipshot)](https://marketplace.visualstudio.com/items?itemName=kkdev92.clipshot)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue.svg)](https://www.typescriptlang.org/)
-[![VS Code](https://img.shields.io/badge/VS%20Code-1.90+-blue.svg)](https://code.visualstudio.com/)
 
 Paste clipboard images into your workspace — then automatically insert a relative path at your cursor.
 Great for markdown docs, notes, and AI chats.

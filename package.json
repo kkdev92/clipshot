@@ -4,7 +4,12 @@
   "description": "Paste clipboard images with automatic file saving - perfect for AI chat and documentation",
   "version": "0.1.4",
   "publisher": "kkdev92",
+  "author": {
+    "name": "kkdev92",
+    "url": "https://github.com/kkdev92"
+  },
   "license": "MIT",
+  "homepage": "https://github.com/kkdev92/clipshot#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/kkdev92/clipshot"
