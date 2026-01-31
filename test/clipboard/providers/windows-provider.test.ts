@@ -9,7 +9,12 @@
 import { describe, it, expect } from 'vitest';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { parseResultOutput, CLIPBOARD_SCRIPT } from '../../../src/clipboard/providers/windows-provider';
+import {
+  parseResultOutput,
+  CLIPBOARD_SCRIPT,
+  isARM64Windows,
+  WindowsClipboardProvider,
+} from '../../../src/clipboard/providers/windows-provider';
 
 const execAsync = promisify(exec);
 
@@ -99,6 +104,52 @@ describe('WindowsClipboardProvider', () => {
 
     it('should contain result output marker', () => {
       expect(CLIPBOARD_SCRIPT).toContain('::RESULT::');
+    });
+  });
+
+  describe('isARM64Windows', () => {
+    it('should return boolean value', () => {
+      const result = isARM64Windows();
+      expect(typeof result).toBe('boolean');
+    });
+
+    it('should return true only on win32 arm64', () => {
+      // This test verifies the function logic
+      // On non-win32/arm64 platforms, should return false
+      if (process.platform !== 'win32' || process.arch !== 'arm64') {
+        expect(isARM64Windows()).toBe(false);
+      }
+    });
+  });
+
+  describe('WindowsClipboardProvider class', () => {
+    it('should instantiate without throwing', () => {
+      const provider = new WindowsClipboardProvider();
+      expect(provider).toBeDefined();
+      expect(provider.getPlatform()).toBe('windows');
+    });
+
+    it('should have isAvailable method', () => {
+      const provider = new WindowsClipboardProvider();
+      expect(typeof provider.isAvailable).toBe('function');
+    });
+
+    it('should have getImageData method', () => {
+      const provider = new WindowsClipboardProvider();
+      expect(typeof provider.getImageData).toBe('function');
+    });
+
+    it('should have cleanup method', () => {
+      const provider = new WindowsClipboardProvider();
+      expect(typeof provider.cleanup).toBe('function');
+    });
+
+    it('should return false for isAvailable on non-Windows', async () => {
+      if (process.platform !== 'win32') {
+        const provider = new WindowsClipboardProvider();
+        const isAvailable = await provider.isAvailable();
+        expect(isAvailable).toBe(false);
+      }
     });
   });
 

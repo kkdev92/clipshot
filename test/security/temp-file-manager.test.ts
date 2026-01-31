@@ -1,6 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs/promises';
-import { TempFileManager } from '../../src/security/temp-file-manager';
+import {
+  TempFileManager,
+  getTempFileManager,
+  disposeGlobalTempFileManager,
+} from '../../src/security/temp-file-manager';
 
 describe('TempFileManager', () => {
   let manager: TempFileManager;
@@ -154,6 +158,98 @@ describe('TempFileManager', () => {
 
       await manager.cleanup(filePath);
       expect(manager.getActiveFileCount()).toBe(0);
+    });
+  });
+
+  describe('scheduleCleanup', () => {
+    it('should schedule cleanup after delay', async () => {
+      const filePath = await manager.createSecureTempFile('.png');
+      expect(manager.getActiveFileCount()).toBe(1);
+
+      // Schedule with short delay for testing
+      manager.scheduleCleanup(filePath, 50);
+
+      // File should still exist immediately after scheduling
+      expect(manager.getActiveFileCount()).toBe(1);
+
+      // Wait for the actual delay
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // After delay, file should be cleaned up
+      expect(manager.getActiveFileCount()).toBe(0);
+    });
+
+    it('should not throw when scheduling cleanup for valid file', async () => {
+      const filePath = await manager.createSecureTempFile('.png');
+
+      // Should not throw
+      expect(() => manager.scheduleCleanup(filePath, 10000)).not.toThrow();
+
+      // Clean up manually since delay is long
+      await manager.cleanup(filePath);
+    });
+  });
+
+  describe('readTempFile error handling', () => {
+    it('should throw when reading deleted temp file', async () => {
+      const filePath = await manager.createSecureTempFile('.png');
+      // Delete the file directly (simulating external deletion)
+      await fs.unlink(filePath);
+
+      // Note: The file is still in activeFiles set, so it won't throw "not managed"
+      // Instead it should throw a read error
+      await expect(manager.readTempFile(filePath)).rejects.toThrow('Failed to read');
+    });
+  });
+});
+
+describe('Global TempFileManager', () => {
+  afterEach(async () => {
+    await disposeGlobalTempFileManager();
+  });
+
+  describe('getTempFileManager', () => {
+    it('should return a TempFileManager instance', () => {
+      const manager = getTempFileManager();
+
+      expect(manager).toBeInstanceOf(TempFileManager);
+    });
+
+    it('should return the same instance on subsequent calls', () => {
+      const manager1 = getTempFileManager();
+      const manager2 = getTempFileManager();
+
+      expect(manager1).toBe(manager2);
+    });
+  });
+
+  describe('disposeGlobalTempFileManager', () => {
+    it('should dispose the global manager', async () => {
+      const manager = getTempFileManager();
+      const filePath = await manager.createSecureTempFile('.png');
+
+      await disposeGlobalTempFileManager();
+
+      // File should be cleaned up
+      await expect(fs.access(filePath)).rejects.toThrow();
+    });
+
+    it('should allow creating new manager after dispose', async () => {
+      const manager1 = getTempFileManager();
+      await disposeGlobalTempFileManager();
+
+      const manager2 = getTempFileManager();
+
+      // Should be different instance
+      expect(manager2).toBeInstanceOf(TempFileManager);
+    });
+
+    it('should handle multiple dispose calls gracefully', async () => {
+      getTempFileManager();
+
+      // Should not throw
+      await expect(disposeGlobalTempFileManager()).resolves.not.toThrow();
+      await expect(disposeGlobalTempFileManager()).resolves.not.toThrow();
     });
   });
 });

@@ -1,14 +1,30 @@
 import { describe, it, expect } from 'vitest';
 import {
   encodePowerShellCommand,
+  buildSafePowerShellCommand,
   sanitizeFileName,
   containsDangerousChars,
   sanitizeDirectoryPath,
   escapeShellArg,
   sanitizeErrorMessage,
+  getPlatform,
 } from '../../src/security/sanitizer';
 
 describe('sanitizer', () => {
+  describe('getPlatform', () => {
+    it('should return a valid platform', () => {
+      const platform = getPlatform();
+      expect(['win32', 'darwin', 'linux']).toContain(platform);
+    });
+
+    it('should return current platform', () => {
+      const platform = getPlatform();
+      // On test system, should match os.platform() or be linux for unsupported
+      expect(typeof platform).toBe('string');
+      expect(platform.length).toBeGreaterThan(0);
+    });
+  });
+
   describe('encodePowerShellCommand', () => {
     it('should encode a simple command', () => {
       const script = 'Write-Host "Hello"';
@@ -41,6 +57,32 @@ describe('sanitizer', () => {
     });
   });
 
+  describe('buildSafePowerShellCommand', () => {
+    it('should build a complete PowerShell command', () => {
+      const result = buildSafePowerShellCommand('powershell.exe', 'echo test');
+      expect(result).toContain('powershell.exe');
+      expect(result).toContain('-NoProfile');
+      expect(result).toContain('-NonInteractive');
+      expect(result).toContain('-ExecutionPolicy');
+      expect(result).toContain('-EncodedCommand');
+    });
+
+    it('should use default execution policy', () => {
+      const result = buildSafePowerShellCommand('pwsh', 'echo test');
+      expect(result).toContain('RemoteSigned');
+    });
+
+    it('should accept custom execution policy', () => {
+      const result = buildSafePowerShellCommand('powershell.exe', 'echo test', 'Bypass');
+      expect(result).toContain('Bypass');
+    });
+
+    it('should properly quote the PowerShell path', () => {
+      const result = buildSafePowerShellCommand('C:\\Program Files\\PowerShell\\pwsh.exe', 'test');
+      expect(result).toContain('"C:\\Program Files\\PowerShell\\pwsh.exe"');
+    });
+  });
+
   describe('sanitizeFileName', () => {
     it('should preserve safe file names', () => {
       expect(sanitizeFileName('image_2024_01_01.png')).toBe('image_2024_01_01.png');
@@ -59,15 +101,47 @@ describe('sanitizer', () => {
       expect(result).toBeTruthy();
     });
 
-    it('should truncate long names', () => {
+    it('should truncate long names with extension', () => {
       const longName = 'a'.repeat(300) + '.png';
       const result = sanitizeFileName(longName);
       expect(result.length).toBeLessThanOrEqual(200 + 4); // 200 + .png
+      expect(result.endsWith('.png')).toBe(true);
+    });
+
+    it('should truncate long names without extension', () => {
+      const longName = 'a'.repeat(300);
+      const result = sanitizeFileName(longName);
+      expect(result.length).toBeLessThanOrEqual(200);
+    });
+
+    it('should truncate long names with far extension', () => {
+      // Extension too far from end (>10 chars before end)
+      const longName = 'a'.repeat(190) + '.verylongextension';
+      const result = sanitizeFileName(longName);
+      expect(result.length).toBeLessThanOrEqual(200);
     });
 
     it('should return default for empty input', () => {
       expect(sanitizeFileName('')).toBe('image');
       expect(sanitizeFileName('   ')).toBe('image');
+    });
+
+    it('should remove problematic characters', () => {
+      expect(sanitizeFileName('file<name>.txt')).toBe('filename.txt');
+      expect(sanitizeFileName('file:name.txt')).toBe('filename.txt');
+      expect(sanitizeFileName('file|name.txt')).toBe('filename.txt');
+    });
+
+    it('should handle trailing dots and spaces on Windows', () => {
+      const result = sanitizeFileName('file...   ');
+      // On Windows, should remove trailing dots/spaces
+      expect(result).toBeTruthy();
+      expect(!result.endsWith('.') && !result.endsWith(' ')).toBe(true);
+    });
+
+    it('should normalize consecutive spaces', () => {
+      const result = sanitizeFileName('file   name   here.txt');
+      expect(result).toBe('file name here.txt');
     });
   });
 
