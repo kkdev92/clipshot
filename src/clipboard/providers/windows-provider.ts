@@ -218,3 +218,39 @@ export function isARM64Windows(): boolean {
   const platform = process.platform;
   return platform === 'win32' && arch === 'arm64';
 }
+
+/**
+ * Parsed result from PowerShell clipboard script
+ */
+export interface ParsedResultOutput {
+  hasImage: boolean;
+  hasText: boolean;
+  tempPath: string;
+}
+
+/**
+ * Parse the output from the PowerShell clipboard script.
+ * Exported for testing purposes.
+ *
+ * @param stdout - The stdout from PowerShell execution
+ * @returns Parsed result object
+ */
+export function parseResultOutput(stdout: string): ParsedResultOutput {
+  const resultLine = stdout.split('\n').find((line) => line.startsWith('::RESULT::'));
+  if (resultLine === undefined || resultLine === '') {
+    return { hasImage: false, hasText: false, tempPath: '' };
+  }
+
+  const parts = resultLine.replace('::RESULT::', '').trim().split(',');
+  return {
+    hasImage: parts[0]?.toLowerCase() === 'true',
+    hasText: parts[1]?.toLowerCase() === 'true',
+    tempPath: parts[2] ?? '',
+  };
+}
+
+/**
+ * The PowerShell script used for clipboard operations.
+ * Exported for testing purposes.
+ */
+export { CLIPBOARD_SCRIPT };
