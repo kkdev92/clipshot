@@ -134,9 +134,11 @@ describe('sanitizer', () => {
 
     it('should handle trailing dots and spaces on Windows', () => {
       const result = sanitizeFileName('file...   ');
-      // On Windows, should remove trailing dots/spaces
       expect(result).toBeTruthy();
-      expect(!result.endsWith('.') && !result.endsWith(' ')).toBe(true);
+      // On Windows, trailing dots/spaces are removed; on other platforms they may remain
+      if (process.platform === 'win32') {
+        expect(!result.endsWith('.') && !result.endsWith(' ')).toBe(true);
+      }
     });
 
     it('should normalize consecutive spaces', () => {
