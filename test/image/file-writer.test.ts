@@ -10,7 +10,9 @@ describe('FileWriter', () => {
 
   beforeEach(async () => {
     // Create a temporary test directory
-    testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'clipshot-test-'));
+    // Use realpath to resolve symlinks (macOS) and short paths (Windows)
+    const tmpBase = await fs.realpath(os.tmpdir());
+    testDir = await fs.mkdtemp(path.join(tmpBase, 'clipshot-test-'));
     writer = new FileWriter(testDir);
   });
 
