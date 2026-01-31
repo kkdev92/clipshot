@@ -4,8 +4,8 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue.svg)](https://www.typescriptlang.org/)
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.90+-blue.svg)](https://code.visualstudio.com/)
 
-Paste clipboard images into your workspace — then automatically insert a relative path at your cursor.  
-Great for markdown docs, notes, and AI chats.  
+Paste clipboard images into your workspace — then automatically insert a relative path at your cursor.
+Great for markdown docs, notes, and AI chats.
 *Built for fast docs — paste once, keep writing.*
 
 > **Status:** Active (best-effort maintenance)
@@ -51,14 +51,19 @@ ClipShot keeps it simple: **paste → saved → path inserted**.
 
 ## Installation
 
-### From VSIX
+### Install from VS Code Marketplace (recommended)
 
-1. Download the `.vsix` file from the releases page
-2. In VS Code, open the Command Palette (`Ctrl+Shift+P`)
-3. Run `Extensions: Install from VSIX...`
-4. Select the downloaded file
+- Open the Extensions view (`Ctrl+Shift+X`)
+- Search for **ClipShot**
+- Click **Install**
 
-### From Source
+You can also open the Marketplace page directly:  
+
+- <https://marketplace.visualstudio.com/items?itemName=kkdev92.clipshot>
+
+### Build from Source (for contributors)
+
+> If you just want to use ClipShot, installing from the Marketplace is the easiest option.
 
 ```bash
 git clone https://github.com/kkdev92/clipshot.git
@@ -86,6 +91,7 @@ You can also use the Command Palette: `ClipShot: Paste Image`
 ClipShot saves the clipboard image into your workspace and inserts a reference at the cursor.
 
 By default (`auto` mode), ClipShot detects the file type and uses the appropriate format:
+
 - **Markdown files** → `![filename](relative/path.png)`
 - **HTML files** → `<img src="relative/path.png" alt="filename" />`
 - **Other files** → `relative/path.png`
@@ -94,14 +100,14 @@ By default (`auto` mode), ClipShot detects the file type and uses the appropriat
 
 ## Configuration
 
-| Setting                       | Default                                           | Description                        |
-| ----------------------------- | ------------------------------------------------- | ---------------------------------- |
-| `clipshot.enabled`            | `true`                                            | Enable/disable the extension       |
-| `clipshot.saveDirectory`      | `.clipshot`                                       | Directory to save images           |
-| `clipshot.fileName.pattern`   | `image_${yyyy}${MM}${dd}_${HH}${mm}${ss}_${seq3}` | File name pattern                  |
-| `clipshot.output.format`      | `png`                                             | Output format (png/jpeg/webp)      |
-| `clipshot.output.jpegQuality` | `80`                                              | JPEG quality (1-100)               |
-| `clipshot.output.webpQuality` | `80`                                              | WebP quality (1-100)               |
+| Setting                       | Default                                           | Description                             |
+| ----------------------------- | ------------------------------------------------- | --------------------------------------- |
+| `clipshot.enabled`            | `true`                                            | Enable/disable the extension            |
+| `clipshot.saveDirectory`      | `.clipshot`                                       | Directory to save images                |
+| `clipshot.fileName.pattern`   | `image_${yyyy}${MM}${dd}_${HH}${mm}${ss}_${seq3}` | File name pattern                       |
+| `clipshot.output.format`      | `png`                                             | Output format (png/jpeg/webp)           |
+| `clipshot.output.jpegQuality` | `80`                                              | JPEG quality (1-100)                    |
+| `clipshot.output.webpQuality` | `80`                                              | WebP quality (1-100)                    |
 | `clipshot.insert.format`      | `auto`                                            | Insert format (auto/path/markdown/html) |
 
 ### File Name Pattern Tokens

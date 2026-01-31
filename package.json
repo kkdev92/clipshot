@@ -2,7 +2,7 @@
   "name": "clipshot",
   "displayName": "ClipShot",
   "description": "Paste clipboard images with automatic file saving - perfect for AI chat and documentation",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "kkdev92",
   "license": "MIT",
   "repository": {
