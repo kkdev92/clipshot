@@ -14,57 +14,44 @@ import { getTempFileManager } from '../../security/temp-file-manager';
 
 const execAsync = promisify(exec);
 
+// Cache PowerShell path to avoid repeated detection
+let cachedPowerShellPath: string | null = null;
+
 /**
- * PowerShell script to check if clipboard has an image and save it
- * Returns: hasImage,hasText,tempFilePath,method
+ * PowerShell script to check if clipboard contains an image and save it to a temp file.
+ *
+ * Output format: ::RESULT::hasImage,hasText,tempFilePath
+ *
+ * Optimizations applied:
+ * - Single Add-Type call loads both assemblies at once
+ * - Early exit when no image is present (avoids unnecessary processing)
+ * - Direct enum value (1 = ImageFormat.Png) instead of reflection lookup
  */
 const CLIPBOARD_SCRIPT = `
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
+# Load required .NET assemblies in a single call for faster startup
+Add-Type -AssemblyName System.Windows.Forms,System.Drawing
 
-$hasImage = $false
-$hasText = $false
-$tempPath = ""
-$method = "none"
+$clipboard = [System.Windows.Forms.Clipboard]
+$hasText = $clipboard::ContainsText()
 
-try {
-    # Check for text
-    if ([System.Windows.Forms.Clipboard]::ContainsText()) {
-        $hasText = $true
-    }
-
-    # Try WinForms API first (most compatible)
-    if ([System.Windows.Forms.Clipboard]::ContainsImage()) {
-        $hasImage = $true
-        $img = [System.Windows.Forms.Clipboard]::GetImage()
-        if ($img -ne $null) {
-            $tempPath = $env:CLIP_TEMP_PATH
-            $img.Save($tempPath, [System.Drawing.Imaging.ImageFormat]::Png)
-            $method = "winforms"
-            $img.Dispose()
-        }
-    }
-} catch {
-    # WinForms failed, try WPF as fallback
-    try {
-        Add-Type -AssemblyName PresentationCore
-        $wpfImg = [System.Windows.Clipboard]::GetImage()
-        if ($wpfImg -ne $null) {
-            $hasImage = $true
-            $tempPath = $env:CLIP_TEMP_PATH
-            $encoder = New-Object System.Windows.Media.Imaging.PngBitmapEncoder
-            $encoder.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($wpfImg))
-            $stream = [System.IO.File]::Create($tempPath)
-            $encoder.Save($stream)
-            $stream.Close()
-            $method = "wpf"
-        }
-    } catch {
-        # Both methods failed
-    }
+# Early exit if no image in clipboard
+if (-not $clipboard::ContainsImage()) {
+    "::RESULT::False,$hasText,"
+    return
 }
 
-Write-Output "::RESULT::$hasImage,$hasText,$tempPath,$method"
+$image = $clipboard::GetImage()
+if ($image -eq $null) {
+    "::RESULT::False,$hasText,"
+    return
+}
+
+# Save image as PNG (enum value 1 = System.Drawing.Imaging.ImageFormat.Png)
+$tempPath = $env:CLIP_TEMP_PATH
+$image.Save($tempPath, 1)
+$image.Dispose()
+
+"::RESULT::True,$hasText,$tempPath"
 `;
 
 /**
@@ -125,7 +112,7 @@ export class WindowsClipboardProvider extends BaseClipboardProvider {
 
     try {
       const { stdout, stderr } = await execAsync(
-        `"${psPath}" -NoProfile -NonInteractive -ExecutionPolicy ${this.executionPolicy} -EncodedCommand ${encodedCommand}`,
+        `"${psPath}" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy ${this.executionPolicy} -EncodedCommand ${encodedCommand}`,
         {
           timeout: TIMEOUTS.CLIPBOARD_READ,
           env: {
@@ -196,14 +183,21 @@ export class WindowsClipboardProvider extends BaseClipboardProvider {
   }
 
   private async getPowerShellPath(): Promise<string> {
+    // Return cached path if available
+    if (cachedPowerShellPath !== null) {
+      return cachedPowerShellPath;
+    }
+
     // Check for PowerShell 7 (pwsh) first - better for ARM64
     try {
       await execAsync('pwsh -NoProfile -Command "echo ok"', { timeout: 5000 });
-      return 'pwsh';
+      cachedPowerShellPath = 'pwsh';
     } catch {
       // Fall back to Windows PowerShell
-      return 'powershell.exe';
+      cachedPowerShellPath = 'powershell.exe';
     }
+
+    return cachedPowerShellPath;
   }
 
   async cleanup(): Promise<void> {

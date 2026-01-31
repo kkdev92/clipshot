@@ -114,13 +114,7 @@ export class PasteHandler {
         throw new NoWorkspaceError();
       }
 
-      // Check clipboard for image
-      const hasImage = await clipboardManager.hasImage();
-      if (!hasImage) {
-        throw new NoImageError();
-      }
-
-      // Get image data from clipboard
+      // Get image data from clipboard (includes hasImage check)
       logger.debug('Reading clipboard image');
       const clipboardData = await clipboardManager.getImageData();
 

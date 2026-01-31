@@ -15,6 +15,9 @@ import { escapeShellArg } from '../../security/sanitizer';
 
 const execAsync = promisify(exec);
 
+// Cache pngpaste availability to avoid repeated checks
+let pngpasteAvailable: boolean | null = null;
+
 /**
  * AppleScript to check clipboard contents and save image
  */
@@ -145,14 +148,26 @@ export class MacOSClipboardProvider extends BaseClipboardProvider {
       return null;
     }
 
+    // Check pngpaste availability (cache result)
+    if (pngpasteAvailable === null) {
+      try {
+        await execAsync('which pngpaste', { timeout: 1000 });
+        pngpasteAvailable = true;
+      } catch {
+        pngpasteAvailable = false;
+      }
+    }
+
     // Try pngpaste first (if installed via Homebrew)
-    try {
-      await execAsync(`pngpaste ${escapeShellArg(this.currentTempFile)}`, {
-        timeout: TIMEOUTS.CLIPBOARD_READ,
-      });
-      return await fs.readFile(this.currentTempFile);
-    } catch {
-      // pngpaste not available, use osascript
+    if (pngpasteAvailable) {
+      try {
+        await execAsync(`pngpaste ${escapeShellArg(this.currentTempFile)}`, {
+          timeout: TIMEOUTS.CLIPBOARD_READ,
+        });
+        return await fs.readFile(this.currentTempFile);
+      } catch {
+        // pngpaste failed (e.g., no image in clipboard), fall through to osascript
+      }
     }
 
     // Use osascript with NSPasteboard
