@@ -122,7 +122,11 @@ export class WindowsClipboardProvider extends BaseClipboardProvider {
         }
       );
 
-      if (stderr && !stderr.includes('WARNING')) {
+      // Ignore non-error stderr output:
+      // - WARNING: PowerShell warnings
+      // - CLIXML progress messages (contain '<Objs' with 'progress' type)
+      //   These occur during first-time .NET assembly loading
+      if (stderr && !this.isIgnorableStderr(stderr)) {
         throw new ClipboardError(`PowerShell error: ${stderr}`);
       }
 
@@ -179,6 +183,32 @@ export class WindowsClipboardProvider extends BaseClipboardProvider {
         format: null,
       };
     }
+  }
+
+  /**
+   * Check if stderr output can be safely ignored.
+   * PowerShell outputs progress messages and warnings to stderr that
+   * don't indicate actual errors.
+   */
+  private isIgnorableStderr(stderr: string): boolean {
+    // PowerShell warnings are not errors
+    if (stderr.includes('WARNING')) {
+      return true;
+    }
+
+    // CLIXML progress messages from .NET assembly loading
+    // These occur during first-time loading of System.Windows.Forms/System.Drawing
+    // Format: <Objs ...><Obj S="progress" ...>...</Obj></Objs>
+    if (stderr.includes('<Objs') && stderr.includes('progress')) {
+      return true;
+    }
+
+    // Progress messages with Completed status
+    if (stderr.includes('<T>Completed</T>')) {
+      return true;
+    }
+
+    return false;
   }
 
   private async getPowerShellPath(): Promise<string> {
