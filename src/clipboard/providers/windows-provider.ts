@@ -186,24 +186,48 @@ export class WindowsClipboardProvider extends BaseClipboardProvider {
   }
 
   /**
-   * Check if stderr output can be safely ignored.
-   * PowerShell outputs progress messages and warnings to stderr that
-   * don't indicate actual errors.
+   * Determines if stderr output from PowerShell can be safely ignored.
+   *
+   * PowerShell writes several types of non-error messages to stderr:
+   *
+   * 1. **WARNING messages**: Informational warnings that don't indicate failure
+   *
+   * 2. **CLIXML progress messages**: XML-formatted progress notifications that occur
+   *    during first-time loading of .NET assemblies (System.Windows.Forms, System.Drawing).
+   *    These are commonly seen on devices where the assemblies haven't been cached yet,
+   *    such as fresh Windows installations or Surface devices.
+   *
+   *    Example CLIXML progress message:
+   *    ```xml
+   *    #< CLIXML
+   *    <Objs Version="1.1.0.1" xmlns="...">
+   *      <Obj S="progress" RefId="0">
+   *        <MS><PR N="Record"><T>Completed</T>...</PR></MS>
+   *      </Obj>
+   *    </Objs>
+   *    ```
+   *
+   * @param stderr - The stderr output from PowerShell execution
+   * @returns true if the stderr content is non-error output that can be ignored
+   *
+   * @see https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_redirection
    */
   private isIgnorableStderr(stderr: string): boolean {
-    // PowerShell warnings are not errors
+    // PowerShell warnings (stream 3) are redirected to stderr but aren't errors
     if (stderr.includes('WARNING')) {
       return true;
     }
 
     // CLIXML progress messages from .NET assembly loading
     // These occur during first-time loading of System.Windows.Forms/System.Drawing
-    // Format: <Objs ...><Obj S="progress" ...>...</Obj></Objs>
+    // The presence of both '<Objs' (CLIXML root) and 'progress' (stream type) indicates
+    // this is a progress notification, not an error
     if (stderr.includes('<Objs') && stderr.includes('progress')) {
       return true;
     }
 
-    // Progress messages with Completed status
+    // Progress messages that have completed successfully
+    // The <T>Completed</T> tag indicates the operation finished without error
     if (stderr.includes('<T>Completed</T>')) {
       return true;
     }

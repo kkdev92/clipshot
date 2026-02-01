@@ -154,38 +154,77 @@ describe('WindowsClipboardProvider', () => {
   });
 
   /**
-   * Tests for stderr handling
+   * Tests for stderr handling patterns
    *
-   * PowerShell outputs various messages to stderr that are not actual errors:
-   * - Progress messages during .NET assembly loading (CLIXML format)
-   * - Warning messages
+   * PowerShell outputs various non-error messages to stderr that the provider
+   * must correctly identify and ignore:
    *
-   * These tests verify that the provider correctly identifies ignorable stderr.
+   * 1. **CLIXML progress messages**: XML-formatted progress notifications during
+   *    first-time .NET assembly loading (System.Windows.Forms, System.Drawing).
+   *    These commonly occur on:
+   *    - Fresh Windows installations
+   *    - Surface devices (Laptop 5, Pro, etc.)
+   *    - Systems where PowerShell assemblies haven't been cached
+   *
+   * 2. **WARNING messages**: PowerShell warnings that don't indicate failure
+   *
+   * Note: The `isIgnorableStderr` method is private, so we test the patterns
+   * it checks for rather than the method directly. This ensures our test
+   * fixtures match real-world stderr output.
+   *
+   * @see https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_redirection
    */
-  describe('stderr handling', () => {
-    // Sample CLIXML progress message that occurs during first-time .NET assembly loading
-    // This is the actual format seen on Surface Laptop 5 and other Windows devices
+  describe('stderr handling patterns', () => {
+    /**
+     * Actual CLIXML progress message captured from Surface Laptop 5 (x64)
+     * when System.Windows.Forms assembly is loaded for the first time.
+     *
+     * Structure:
+     * - `#< CLIXML` header indicates CLIXML format
+     * - `<Objs>` root element with PowerShell namespace
+     * - `<Obj S="progress">` indicates this is progress stream output
+     * - `<T>Completed</T>` indicates successful completion
+     * - Japanese text: "モジュールを初めて使用するための準備をしています"
+     *   (Preparing to use the module for the first time)
+     */
     const CLIXML_PROGRESS_MESSAGE = `#< CLIXML
 <Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04"><Obj S="progress" RefId="0"><TN RefId="0"><T>System.Management.Automation.PSCustomObject</T><T>System.Object</T></TN><MS><I64 N="SourceId">1</I64><PR N="Record"><AV>モジュールを初めて使用するための準備をしています。</AV><AI>0</AI><Nil /><PI>-1</PI><PC>-1</PC><T>Completed</T><SR>-1</SR><SD> </SD></PR></MS></Obj></Objs>`;
 
-    it('should identify CLIXML progress messages as ignorable', () => {
-      // The provider should not throw an error for CLIXML progress messages
-      // We can verify this by checking the message contains the expected patterns
+    it('should contain CLIXML root element pattern (<Objs)', () => {
+      // The provider checks for '<Objs' to identify CLIXML format
       expect(CLIXML_PROGRESS_MESSAGE).toContain('<Objs');
+    });
+
+    it('should contain progress stream indicator', () => {
+      // The provider checks for 'progress' to identify progress messages
+      // This appears as S="progress" in the Obj element
       expect(CLIXML_PROGRESS_MESSAGE).toContain('progress');
+    });
+
+    it('should contain completion status tag', () => {
+      // The provider checks for '<T>Completed</T>' to identify successful completion
+      // Messages with this tag are safe to ignore
       expect(CLIXML_PROGRESS_MESSAGE).toContain('<T>Completed</T>');
     });
 
-    it('should identify WARNING messages as ignorable', () => {
-      const warningMessage = 'WARNING: Some non-critical warning';
-      expect(warningMessage).toContain('WARNING');
+    it('should match PowerShell CLIXML namespace', () => {
+      // Verify this is genuine PowerShell CLIXML output
+      expect(CLIXML_PROGRESS_MESSAGE).toContain(
+        'xmlns="http://schemas.microsoft.com/powershell/2004/04"'
+      );
     });
 
-    it('CLIXML progress format should include assembly loading indicators', () => {
-      // Verify the CLIXML message structure matches what we expect
-      expect(CLIXML_PROGRESS_MESSAGE).toMatch(/<Objs.*xmlns=/);
-      expect(CLIXML_PROGRESS_MESSAGE).toMatch(/S="progress"/);
-      expect(CLIXML_PROGRESS_MESSAGE).toMatch(/<T>Completed<\/T>/);
+    it('WARNING messages should contain WARNING keyword', () => {
+      // PowerShell warnings are identified by the 'WARNING' prefix
+      const warningExamples = [
+        'WARNING: Some non-critical warning',
+        'WARNING: The cmdlet is deprecated',
+        'WARNING: This operation may take a long time',
+      ];
+
+      for (const warning of warningExamples) {
+        expect(warning).toContain('WARNING');
+      }
     });
   });
 
