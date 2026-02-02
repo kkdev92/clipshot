@@ -9,9 +9,15 @@
  * - Automatically reads dependencies from package.json
  * - Verifies bundleDependencies matches dependencies
  * - Checks all required modules exist in VSIX
- * - Tests sharp module can be loaded
+ * - Supports platform-specific VSIX verification
  *
- * Run after `npm run package` to validate the VSIX before publishing.
+ * Usage:
+ *   node scripts/verify-vsix.mjs [target-platform]
+ *
+ * Examples:
+ *   node scripts/verify-vsix.mjs              # Verify universal or current platform
+ *   node scripts/verify-vsix.mjs win32-arm64  # Verify Windows ARM64 VSIX
+ *   node scripts/verify-vsix.mjs linux-x64    # Verify Linux x64 VSIX
  */
 
 import { execSync } from 'child_process';
@@ -22,15 +28,23 @@ import { fileURLToPath } from 'url';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const projectRoot = resolve(__dirname, '..');
 
-// Platform-specific sharp binaries (at least one should exist)
-const PLATFORM_BINARIES = [
-  'node_modules/@img/sharp-win32-x64',
-  'node_modules/@img/sharp-win32-arm64',
-  'node_modules/@img/sharp-linux-x64',
-  'node_modules/@img/sharp-linux-arm64',
-  'node_modules/@img/sharp-darwin-x64',
-  'node_modules/@img/sharp-darwin-arm64',
-];
+// Target platform from command line argument
+const targetPlatform = process.argv[2] || null;
+
+// Map vsce target to sharp @img package name
+const TARGET_TO_SHARP_BINARY = {
+  'win32-x64': '@img/sharp-win32-x64',
+  'win32-arm64': '@img/sharp-win32-arm64',
+  'linux-x64': '@img/sharp-linux-x64',
+  'linux-arm64': '@img/sharp-linux-arm64',
+  'darwin-x64': '@img/sharp-darwin-x64',
+  'darwin-arm64': '@img/sharp-darwin-arm64',
+};
+
+// All platform-specific sharp binaries
+const ALL_PLATFORM_BINARIES = Object.values(TARGET_TO_SHARP_BINARY).map(
+  pkg => `node_modules/${pkg}`
+);
 
 // Known transitive dependencies that must be included
 // Add entries here for dependencies that have important transitive deps
@@ -48,7 +62,17 @@ function findVsixFile() {
   if (files.length === 0) {
     throw new Error('No .vsix file found. Run "npm run package" first.');
   }
-  // Return the first one (usually there's only one)
+
+  // If target platform specified, look for platform-specific VSIX
+  if (targetPlatform) {
+    const platformVsix = files.find(f => f.includes(`@${targetPlatform}`));
+    if (platformVsix) {
+      return join(projectRoot, platformVsix);
+    }
+    // Fall back to first VSIX if platform-specific not found
+    console.log(`  Note: No VSIX with @${targetPlatform} found, using ${files[0]}`);
+  }
+
   return join(projectRoot, files[0]);
 }
 
@@ -125,20 +149,36 @@ function verifyModulesInVsix(extractDir, pkg) {
   // Check platform binaries for sharp
   if (dependencies.includes('sharp')) {
     console.log('\nVerifying sharp platform binaries...\n');
-    const foundBinaries = [];
-    for (const binaryPath of PLATFORM_BINARIES) {
-      const fullPath = join(extensionDir, binaryPath);
-      if (existsSync(fullPath)) {
-        console.log(`  ✓ ${binaryPath}`);
-        foundBinaries.push(binaryPath);
-      }
-    }
 
-    if (foundBinaries.length === 0) {
-      errors.push('No platform-specific sharp binaries found (@img/sharp-*)');
-      console.log('  ✗ No platform binaries found');
+    if (targetPlatform && TARGET_TO_SHARP_BINARY[targetPlatform]) {
+      // Platform-specific VSIX: check only the required binary
+      const expectedBinary = TARGET_TO_SHARP_BINARY[targetPlatform];
+      const binaryPath = `node_modules/${expectedBinary}`;
+      const fullPath = join(extensionDir, binaryPath);
+
+      if (existsSync(fullPath)) {
+        console.log(`  ✓ ${binaryPath} (required for ${targetPlatform})`);
+      } else {
+        console.log(`  ✗ ${binaryPath}: MISSING (required for ${targetPlatform})`);
+        errors.push(`Missing platform binary for ${targetPlatform}: ${expectedBinary}`);
+      }
     } else {
-      console.log(`\n  Found ${foundBinaries.length} platform binary package(s)`);
+      // Universal VSIX or unknown target: check for any binary
+      const foundBinaries = [];
+      for (const binaryPath of ALL_PLATFORM_BINARIES) {
+        const fullPath = join(extensionDir, binaryPath);
+        if (existsSync(fullPath)) {
+          console.log(`  ✓ ${binaryPath}`);
+          foundBinaries.push(binaryPath);
+        }
+      }
+
+      if (foundBinaries.length === 0) {
+        errors.push('No platform-specific sharp binaries found (@img/sharp-*)');
+        console.log('  ✗ No platform binaries found');
+      } else {
+        console.log(`\n  Found ${foundBinaries.length} platform binary package(s)`);
+      }
     }
   }
 
@@ -191,6 +231,7 @@ async function main() {
     // Load package.json
     const pkg = loadPackageJson();
     console.log(`\nPackage: ${pkg.name}@${pkg.version}`);
+    console.log(`Target: ${targetPlatform || 'universal'}`);
     console.log(`Dependencies: ${Object.keys(pkg.dependencies || {}).join(', ')}`);
 
     // Step 1: Verify bundleDependencies configuration
