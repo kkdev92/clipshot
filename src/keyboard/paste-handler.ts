@@ -11,34 +11,21 @@ import {
 } from '../core/errors';
 import { RESIZE_PRESETS } from '../core/constants';
 import { getClipboardManager } from '../clipboard/clipboard-manager';
-import { ImageProcessor } from '../image/image-processor';
+import { ImageProcessor, getSharpLoadError } from '../image/image-processor';
 
 /**
  * Resolve resize options from config, applying preset if set
  *
  * @param config - Extension configuration
- * @param logger - Optional logger for warnings
  * @returns Resolved maxWidth and maxHeight values
  */
-function resolveResizeOptions(
-  config: ExtensionConfig,
-  logger?: Logger
-): {
+function resolveResizeOptions(config: ExtensionConfig): {
   maxWidth: number | null;
   maxHeight: number | null;
 } {
   // Preset overrides manual settings
   if (config.resize.preset) {
     const preset = RESIZE_PRESETS[config.resize.preset];
-
-    // Warn if user has manual settings that are being overridden
-    if (logger && (config.resize.maxWidth !== null || config.resize.maxHeight !== null)) {
-      logger.warn(
-        `Preset "${config.resize.preset}" overrides manual resize settings ` +
-        `(${config.resize.maxWidth}x${config.resize.maxHeight} -> ${preset.maxWidth}x${preset.maxHeight})`
-      );
-    }
-
     return {
       maxWidth: preset.maxWidth,
       maxHeight: preset.maxHeight,
@@ -165,13 +152,24 @@ export class PasteHandler {
       logger.debug('Processing image', { size: clipboardData.imageBuffer.length });
       const imageProcessor = new ImageProcessor(workspaceRoot);
 
+      // Check Sharp availability
+      const sharpAvailable = await imageProcessor.isSharpAvailable();
+      if (!sharpAvailable) {
+        const loadError = getSharpLoadError();
+        logger.warn('Sharp is not available - resize will be skipped');
+        if (loadError !== null && loadError !== undefined) {
+          logger.error('Sharp load error', loadError);
+        }
+      }
+
       // Resolve resize options (preset overrides manual settings)
-      const resizeOptions = resolveResizeOptions(config, logger);
-      logger.info('Resize config', {
+      const resizeOptions = resolveResizeOptions(config);
+      logger.debug('Resize config', {
         mode: config.resize.mode,
         preset: config.resize.preset,
         maxWidth: resizeOptions.maxWidth,
         maxHeight: resizeOptions.maxHeight,
+        sharpAvailable,
       });
 
       const processedImage = await imageProcessor.processAndSave(
@@ -189,11 +187,7 @@ export class PasteHandler {
         }
       );
 
-      logger.info('Image saved', {
-        path: processedImage.relativePath,
-        size: processedImage.fileSize,
-        dimensions: processedImage.dimensions,
-      });
+      logger.info('Image saved', { path: processedImage.relativePath });
 
       // Format the insert text
       const insertText = formatInsertText(

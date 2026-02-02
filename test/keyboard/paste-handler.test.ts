@@ -120,6 +120,7 @@ describe('PasteHandler', () => {
   };
   let mockImageProcessor: {
     processAndSave: ReturnType<typeof vi.fn>;
+    isSharpAvailable: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -139,6 +140,7 @@ describe('PasteHandler', () => {
     // Setup image processor mock
     mockImageProcessor = {
       processAndSave: vi.fn(),
+      isSharpAvailable: vi.fn().mockResolvedValue(true),
     };
     vi.mocked(ImageProcessor).mockImplementation(() => mockImageProcessor as never);
 

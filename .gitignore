@@ -92,6 +92,7 @@ yarn-error.log*
 *.tmp
 *.temp
 *.swp
+.vsix-verify-temp/
 
 # ===== Database =====
 *.db
