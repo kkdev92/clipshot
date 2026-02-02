@@ -3,18 +3,39 @@
  * Handles format conversion, optimization, and metadata extraction
  */
 
-import type { ImageFormat, ProcessedImage, ImageDimensions } from '../core/types';
+import type { ImageFormat, ProcessedImage, ImageDimensions, ResizeMode } from '../core/types';
 import { ImageProcessingError, FileSizeLimitError } from '../core/errors';
+import { LIMITS } from '../core/constants';
 import { PathGenerator } from './path-generator';
 import { FileWriter } from './file-writer';
 
 // Sharp is dynamically imported to handle cases where it's not available
+
+/**
+ * Output information returned by Sharp's toBuffer({ resolveWithObject: true })
+ */
+type OutputInfo = {
+  format: string;
+  width: number;
+  height: number;
+  channels: number;
+  size: number;
+};
+
+/**
+ * Sharp instance type for processing pipeline
+ */
 type SharpInstance = {
   metadata(): Promise<{ width?: number; height?: number; format?: string }>;
+  resize(width?: number | null, height?: number | null, options?: {
+    fit?: 'contain' | 'cover' | 'fill' | 'inside' | 'outside';
+    withoutEnlargement?: boolean;
+  }): SharpInstance;
   png(options?: { compressionLevel?: number; progressive?: boolean }): SharpInstance;
   jpeg(options?: { quality?: number; progressive?: boolean; mozjpeg?: boolean }): SharpInstance;
   webp(options?: { quality?: number }): SharpInstance;
   toBuffer(): Promise<Buffer>;
+  toBuffer(options: { resolveWithObject: true }): Promise<{ data: Buffer; info: OutputInfo }>;
 };
 
 type SharpModule = {
@@ -56,6 +77,12 @@ export interface ImageProcessorOptions {
   webpQuality: number;
   /** Maximum file size in MB */
   maxFileSizeMB: number;
+  /** Resize mode */
+  resizeMode: ResizeMode;
+  /** Maximum width in pixels (null = no limit) */
+  maxWidth: number | null;
+  /** Maximum height in pixels (null = no limit) */
+  maxHeight: number | null;
 }
 
 /**
@@ -148,16 +175,36 @@ export class ImageProcessor {
   /**
    * Process image using Sharp library
    *
-   * Provides full image processing capabilities including:
-   * - Format conversion (PNG, JPEG, WebP)
-   * - Quality optimization
-   * - Metadata extraction (dimensions)
+   * Uses an efficient single-pipeline approach:
+   * 1. Create Sharp instance with input buffer
+   * 2. Apply resize if mode='fit' and dimensions specified
+   * 3. Apply format conversion with quality settings
+   * 4. Output buffer with metadata in one operation using toBuffer({ resolveWithObject: true })
+   *
+   * ## Resize Behavior
+   * - mode='off': No resize applied, original dimensions preserved
+   * - mode='fit': Fits image within maxWidth/maxHeight bounds
+   *   - Maintains aspect ratio using 'inside' fit
+   *   - Does NOT upscale images smaller than bounds (withoutEnlargement: true)
+   *   - If only maxWidth specified: constrains width, height scales proportionally
+   *   - If only maxHeight specified: constrains height, width scales proportionally
+   *   - If both specified: constrains to fit within both bounds
+   *
+   * ## Why 'inside' fit mode?
+   * - 'inside': Image fits entirely within bounds, preserving aspect ratio (chosen)
+   * - 'contain': Same as 'inside' but may add padding (not wanted)
+   * - 'cover': Fills bounds but may crop (not wanted for screenshots)
+   * - 'fill': Stretches to fit, distorts aspect ratio (not wanted)
+   *
+   * ## Dimension Rounding
+   * Final dimensions may vary ±1 pixel due to aspect ratio calculation rounding.
+   * Sharp handles this internally to maintain integer pixel dimensions.
    *
    * @param sharp - Sharp module reference
    * @param buffer - Raw image data buffer
-   * @param options - Processing options
-   * @returns Processed buffer and extracted dimensions
-   * @throws ImageProcessingError if Sharp processing fails
+   * @param options - Processing options including format, quality, and resize settings
+   * @returns Processed buffer and FINAL dimensions (post-resize, post-format-conversion)
+   * @throws ImageProcessingError with context about processing failure
    */
   private async processWithSharp(
     sharp: SharpModule,
@@ -165,43 +212,72 @@ export class ImageProcessor {
     options: ImageProcessorOptions
   ): Promise<{ processedBuffer: Buffer; dimensions: ImageDimensions | null }> {
     try {
-      const image = sharp.default(buffer);
+      // Create single Sharp pipeline for efficient processing
+      let pipeline = sharp.default(buffer);
 
-      // Get metadata
-      const metadata = await image.metadata();
+      // Apply resize if mode is 'fit' and dimensions are specified
+      if (options.resizeMode === 'fit' && (options.maxWidth !== null || options.maxHeight !== null)) {
+        pipeline = pipeline.resize(
+          options.maxWidth ?? undefined,
+          options.maxHeight ?? undefined,
+          {
+            fit: 'inside',           // Maintain aspect ratio, fit within bounds
+            withoutEnlargement: true // Don't upscale small images
+          }
+        );
+      }
+
+      // Apply format conversion
+      pipeline = this.applyFormatConversion(pipeline, options);
+
+      // Get processed buffer with output info (includes final dimensions)
+      // This is more efficient than calling metadata() separately
+      const { data: processedBuffer, info } = await pipeline.toBuffer({ resolveWithObject: true });
+
+      // Extract final dimensions from output info
       const dimensions: ImageDimensions | null =
-        metadata.width !== undefined && metadata.width !== 0 && metadata.height !== undefined && metadata.height !== 0
-          ? { width: metadata.width, height: metadata.height }
+        info.width > 0 && info.height > 0
+          ? { width: info.width, height: info.height }
           : null;
 
-      // Convert to desired format
-      let processedImage: SharpInstance;
+      return { processedBuffer, dimensions };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new ImageProcessingError(
+        `Sharp processing failed: ${errorMessage} (format: ${options.format}, resize: ${options.resizeMode})`,
+        'Failed to process image'
+      );
+    }
+  }
 
-      if (options.format === 'png') {
-        processedImage = image.png({
+  /**
+   * Apply format conversion to Sharp pipeline
+   *
+   * @param pipeline - Sharp pipeline instance
+   * @param options - Processing options with format and quality settings
+   * @returns Sharp pipeline with format conversion applied
+   */
+  private applyFormatConversion(
+    pipeline: SharpInstance,
+    options: ImageProcessorOptions
+  ): SharpInstance {
+    switch (options.format) {
+      case 'png':
+        return pipeline.png({
           compressionLevel: 6,
           progressive: false,
         });
-      } else if (options.format === 'webp') {
-        processedImage = image.webp({
+      case 'webp':
+        return pipeline.webp({
           quality: options.webpQuality,
         });
-      } else {
-        processedImage = image.jpeg({
+      case 'jpeg':
+      default:
+        return pipeline.jpeg({
           quality: options.jpegQuality,
           progressive: true,
           mozjpeg: true,
         });
-      }
-
-      const processedBuffer = await processedImage.toBuffer();
-
-      return { processedBuffer, dimensions };
-    } catch (error) {
-      throw new ImageProcessingError(
-        `Sharp processing failed: ${error instanceof Error ? error.message : String(error)}`,
-        'Failed to process image'
-      );
     }
   }
 
@@ -280,8 +356,9 @@ export class ImageProcessor {
       const width = buffer.readUInt32BE(16);
       const height = buffer.readUInt32BE(20);
 
-      // Sanity check
-      if (width > 0 && width < 100000 && height > 0 && height < 100000) {
+      // Sanity check: dimensions must be positive and within supported bounds
+      // Uses MAX_IMAGE_DIMENSION constant for consistency with validation limits
+      if (width > 0 && width <= LIMITS.MAX_IMAGE_DIMENSION && height > 0 && height <= LIMITS.MAX_IMAGE_DIMENSION) {
         return { width, height };
       }
     } catch {

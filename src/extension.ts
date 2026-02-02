@@ -10,7 +10,7 @@ import {
   getSetting,
   onConfigChange,
 } from '@kkdev92/vscode-ext-kit';
-import type { ExtensionConfig, LogLevel, ImageFormat, InsertFormat, AltSource, NotificationLevel } from './core/types';
+import type { ExtensionConfig, LogLevel, ImageFormat, InsertFormat, AltSource, NotificationLevel, ResizeMode, ResizePreset } from './core/types';
 import { EXTENSION_ID, COMMANDS, CONTEXT_KEYS, DEFAULTS, CONFIG_PREFIX } from './core/constants';
 import { validateConfiguration, sanitizeConfiguration } from './config/validators';
 import { getPasteHandler } from './keyboard/paste-handler';
@@ -41,6 +41,12 @@ function loadConfiguration(): ExtensionConfig {
       format: getSetting<ImageFormat>(CONFIG_PREFIX, 'output.format', DEFAULTS.OUTPUT_FORMAT),
       jpegQuality: getSetting<number>(CONFIG_PREFIX, 'output.jpegQuality', DEFAULTS.JPEG_QUALITY),
       webpQuality: getSetting<number>(CONFIG_PREFIX, 'output.webpQuality', DEFAULTS.WEBP_QUALITY),
+    },
+    resize: {
+      mode: getSetting<ResizeMode>(CONFIG_PREFIX, 'resize.mode', DEFAULTS.RESIZE_MODE),
+      maxWidth: getSetting<number | null>(CONFIG_PREFIX, 'resize.maxWidth', DEFAULTS.RESIZE_MAX_WIDTH),
+      maxHeight: getSetting<number | null>(CONFIG_PREFIX, 'resize.maxHeight', DEFAULTS.RESIZE_MAX_HEIGHT),
+      preset: getSetting<ResizePreset | null>(CONFIG_PREFIX, 'resize.preset', DEFAULTS.RESIZE_PRESET),
     },
     insert: {
       format: getSetting<InsertFormat>(CONFIG_PREFIX, 'insert.format', DEFAULTS.INSERT_FORMAT),

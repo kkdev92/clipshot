@@ -31,6 +31,9 @@ describe('ImageProcessor', () => {
     jpegQuality: 80,
     webpQuality: 80,
     maxFileSizeMB: 10,
+    resizeMode: 'off',
+    maxWidth: null,
+    maxHeight: null,
   };
 
   beforeEach(async () => {
@@ -372,6 +375,40 @@ describe('ImageProcessor', () => {
         processor.processAndSave(SHORT_BUFFER, '.clipshot', 'test', defaultOptions)
       ).rejects.toThrow();
     });
+
+    it('should throw for corrupted PNG with valid signature but invalid IHDR', async () => {
+      // Valid PNG signature but corrupted IHDR chunk (invalid chunk length)
+      const corruptedPng = Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, // PNG signature
+        0xff, 0xff, 0xff, 0xff, // Invalid chunk length (too large)
+        0x49, 0x48, 0x44, 0x52, // IHDR type
+        0x00, 0x00, 0x00, 0x00, // Corrupted data
+      ]);
+
+      const isSharpAvailable = await processor.isSharpAvailable();
+      if (isSharpAvailable) {
+        // Sharp should detect the corrupted data and throw
+        await expect(
+          processor.processAndSave(corruptedPng, '.clipshot', 'test', defaultOptions)
+        ).rejects.toThrow();
+      }
+    });
+
+    it('should throw for truncated JPEG with valid signature', async () => {
+      // Valid JPEG signature but truncated data
+      const truncatedJpeg = Buffer.from([
+        0xff, 0xd8, 0xff, 0xe0, // JPEG SOI + APP0 marker
+        0x00, 0x10, // Segment length
+        // Missing rest of JFIF header and image data
+      ]);
+
+      const isSharpAvailable = await processor.isSharpAvailable();
+      if (isSharpAvailable) {
+        await expect(
+          processor.processAndSave(truncatedJpeg, '.clipshot', 'test', defaultOptions)
+        ).rejects.toThrow();
+      }
+    });
   });
 
   describe('file name pattern', () => {
@@ -519,6 +556,425 @@ describe('ImageProcessor', () => {
       await expect(
         processor.processAndSave(veryShortBuffer, '.clipshot', 'test', defaultOptions)
       ).rejects.toThrow();
+    });
+  });
+
+  describe('resize functionality', () => {
+    it('should not resize when mode is off', async () => {
+      const options: ImageProcessorOptions = {
+        ...defaultOptions,
+        resizeMode: 'off',
+        maxWidth: 1,
+        maxHeight: 1,
+      };
+
+      const result = await processor.processAndSave(
+        VALID_PNG_BUFFER,
+        '.clipshot',
+        'no_resize_${seq3}',
+        options
+      );
+
+      // Should complete without error (resize options ignored when mode is off)
+      expect(result.fileSize).toBeGreaterThan(0);
+    });
+
+    it('should not resize when maxWidth and maxHeight are null', async () => {
+      const options: ImageProcessorOptions = {
+        ...defaultOptions,
+        resizeMode: 'fit',
+        maxWidth: null,
+        maxHeight: null,
+      };
+
+      const result = await processor.processAndSave(
+        VALID_PNG_BUFFER,
+        '.clipshot',
+        'null_resize_${seq3}',
+        options
+      );
+
+      expect(result.fileSize).toBeGreaterThan(0);
+    });
+
+    it('should not upscale small images when mode is fit', async () => {
+      const options: ImageProcessorOptions = {
+        ...defaultOptions,
+        resizeMode: 'fit',
+        maxWidth: 1000,
+        maxHeight: 1000,
+      };
+
+      // VALID_PNG_BUFFER is 1x1, should not be upscaled
+      const result = await processor.processAndSave(
+        VALID_PNG_BUFFER,
+        '.clipshot',
+        'no_upscale_${seq3}',
+        options
+      );
+
+      expect(result.fileSize).toBeGreaterThan(0);
+      // Dimensions should remain 1x1 (not upscaled to 1000x1000)
+      if (result.dimensions) {
+        expect(result.dimensions.width).toBe(1);
+        expect(result.dimensions.height).toBe(1);
+      }
+    });
+
+    it('should resize large image to fit maxWidth', async () => {
+      const isSharpAvailable = await processor.isSharpAvailable();
+      if (!isSharpAvailable) {
+        // Skip test if Sharp is not available
+        return;
+      }
+
+      // Create a larger image using Sharp
+      const sharp = await import('sharp');
+      const largeImage = await sharp.default({
+        create: {
+          width: 200,
+          height: 100,
+          channels: 4,
+          background: { r: 255, g: 0, b: 0, alpha: 1 }
+        }
+      }).png().toBuffer();
+
+      const options: ImageProcessorOptions = {
+        ...defaultOptions,
+        resizeMode: 'fit',
+        maxWidth: 100,
+        maxHeight: null,
+      };
+
+      const result = await processor.processAndSave(
+        largeImage,
+        '.clipshot',
+        'resize_width_${seq3}',
+        options
+      );
+
+      expect(result.fileSize).toBeGreaterThan(0);
+      expect(result.dimensions).not.toBeNull();
+      if (result.dimensions) {
+        // Should be resized to 100x50 (maintaining aspect ratio)
+        expect(result.dimensions.width).toBe(100);
+        expect(result.dimensions.height).toBe(50);
+      }
+    });
+
+    it('should resize large image to fit maxHeight', async () => {
+      const isSharpAvailable = await processor.isSharpAvailable();
+      if (!isSharpAvailable) {
+        return;
+      }
+
+      const sharp = await import('sharp');
+      const largeImage = await sharp.default({
+        create: {
+          width: 100,
+          height: 200,
+          channels: 4,
+          background: { r: 0, g: 255, b: 0, alpha: 1 }
+        }
+      }).png().toBuffer();
+
+      const options: ImageProcessorOptions = {
+        ...defaultOptions,
+        resizeMode: 'fit',
+        maxWidth: null,
+        maxHeight: 100,
+      };
+
+      const result = await processor.processAndSave(
+        largeImage,
+        '.clipshot',
+        'resize_height_${seq3}',
+        options
+      );
+
+      expect(result.fileSize).toBeGreaterThan(0);
+      expect(result.dimensions).not.toBeNull();
+      if (result.dimensions) {
+        // Should be resized to 50x100 (maintaining aspect ratio)
+        expect(result.dimensions.width).toBe(50);
+        expect(result.dimensions.height).toBe(100);
+      }
+    });
+
+    it('should fit within both maxWidth and maxHeight', async () => {
+      const isSharpAvailable = await processor.isSharpAvailable();
+      if (!isSharpAvailable) {
+        return;
+      }
+
+      const sharp = await import('sharp');
+      const largeImage = await sharp.default({
+        create: {
+          width: 400,
+          height: 200,
+          channels: 4,
+          background: { r: 0, g: 0, b: 255, alpha: 1 }
+        }
+      }).png().toBuffer();
+
+      const options: ImageProcessorOptions = {
+        ...defaultOptions,
+        resizeMode: 'fit',
+        maxWidth: 100,
+        maxHeight: 100,
+      };
+
+      const result = await processor.processAndSave(
+        largeImage,
+        '.clipshot',
+        'resize_both_${seq3}',
+        options
+      );
+
+      expect(result.fileSize).toBeGreaterThan(0);
+      expect(result.dimensions).not.toBeNull();
+      if (result.dimensions) {
+        // 400x200 -> constrained by width to 100x50
+        expect(result.dimensions.width).toBe(100);
+        expect(result.dimensions.height).toBe(50);
+      }
+    });
+
+    it('should maintain aspect ratio when constrained by height', async () => {
+      const isSharpAvailable = await processor.isSharpAvailable();
+      if (!isSharpAvailable) {
+        return;
+      }
+
+      const sharp = await import('sharp');
+      const largeImage = await sharp.default({
+        create: {
+          width: 200,
+          height: 400,
+          channels: 4,
+          background: { r: 128, g: 128, b: 128, alpha: 1 }
+        }
+      }).png().toBuffer();
+
+      const options: ImageProcessorOptions = {
+        ...defaultOptions,
+        resizeMode: 'fit',
+        maxWidth: 100,
+        maxHeight: 100,
+      };
+
+      const result = await processor.processAndSave(
+        largeImage,
+        '.clipshot',
+        'resize_aspect_${seq3}',
+        options
+      );
+
+      expect(result.fileSize).toBeGreaterThan(0);
+      expect(result.dimensions).not.toBeNull();
+      if (result.dimensions) {
+        // 200x400 -> constrained by height to 50x100
+        expect(result.dimensions.width).toBe(50);
+        expect(result.dimensions.height).toBe(100);
+      }
+    });
+  });
+
+  describe('format conversion with resize', () => {
+    it('should resize and convert to JPEG correctly', async () => {
+      const isSharpAvailable = await processor.isSharpAvailable();
+      if (!isSharpAvailable) {
+        return;
+      }
+
+      const sharp = await import('sharp');
+      const largeImage = await sharp.default({
+        create: {
+          width: 200,
+          height: 100,
+          channels: 4,
+          background: { r: 255, g: 0, b: 0, alpha: 1 }
+        }
+      }).png().toBuffer();
+
+      const options: ImageProcessorOptions = {
+        ...defaultOptions,
+        format: 'jpeg',
+        jpegQuality: 80,
+        resizeMode: 'fit',
+        maxWidth: 100,
+        maxHeight: null,
+      };
+
+      const result = await processor.processAndSave(
+        largeImage,
+        '.clipshot',
+        'format_resize_jpeg_${seq3}',
+        options
+      );
+
+      expect(result.format).toBe('jpeg');
+      expect(result.dimensions).not.toBeNull();
+      if (result.dimensions) {
+        expect(result.dimensions.width).toBe(100);
+        expect(result.dimensions.height).toBe(50);
+      }
+    });
+
+    it('should resize and convert to WebP correctly', async () => {
+      const isSharpAvailable = await processor.isSharpAvailable();
+      if (!isSharpAvailable) {
+        return;
+      }
+
+      const sharp = await import('sharp');
+      const largeImage = await sharp.default({
+        create: {
+          width: 300,
+          height: 200,
+          channels: 4,
+          background: { r: 0, g: 255, b: 0, alpha: 1 }
+        }
+      }).png().toBuffer();
+
+      const options: ImageProcessorOptions = {
+        ...defaultOptions,
+        format: 'webp',
+        webpQuality: 90,
+        resizeMode: 'fit',
+        maxWidth: 150,
+        maxHeight: 150,
+      };
+
+      const result = await processor.processAndSave(
+        largeImage,
+        '.clipshot',
+        'format_resize_webp_${seq3}',
+        options
+      );
+
+      expect(result.format).toBe('webp');
+      expect(result.dimensions).not.toBeNull();
+      if (result.dimensions) {
+        // 300x200 -> constrained by width to 150x100
+        expect(result.dimensions.width).toBe(150);
+        expect(result.dimensions.height).toBe(100);
+      }
+    });
+  });
+
+  describe('resize edge cases', () => {
+    it('should handle square images correctly', async () => {
+      const isSharpAvailable = await processor.isSharpAvailable();
+      if (!isSharpAvailable) {
+        return;
+      }
+
+      const sharp = await import('sharp');
+      const squareImage = await sharp.default({
+        create: {
+          width: 200,
+          height: 200,
+          channels: 4,
+          background: { r: 0, g: 0, b: 255, alpha: 1 }
+        }
+      }).png().toBuffer();
+
+      const options: ImageProcessorOptions = {
+        ...defaultOptions,
+        resizeMode: 'fit',
+        maxWidth: 100,
+        maxHeight: 100,
+      };
+
+      const result = await processor.processAndSave(
+        squareImage,
+        '.clipshot',
+        'resize_square_${seq3}',
+        options
+      );
+
+      expect(result.dimensions).not.toBeNull();
+      if (result.dimensions) {
+        expect(result.dimensions.width).toBe(100);
+        expect(result.dimensions.height).toBe(100);
+      }
+    });
+
+    it('should not resize image exactly at max boundary', async () => {
+      const isSharpAvailable = await processor.isSharpAvailable();
+      if (!isSharpAvailable) {
+        return;
+      }
+
+      const sharp = await import('sharp');
+      const exactImage = await sharp.default({
+        create: {
+          width: 100,
+          height: 100,
+          channels: 4,
+          background: { r: 128, g: 128, b: 128, alpha: 1 }
+        }
+      }).png().toBuffer();
+
+      const options: ImageProcessorOptions = {
+        ...defaultOptions,
+        resizeMode: 'fit',
+        maxWidth: 100,
+        maxHeight: 100,
+      };
+
+      const result = await processor.processAndSave(
+        exactImage,
+        '.clipshot',
+        'resize_exact_${seq3}',
+        options
+      );
+
+      expect(result.dimensions).not.toBeNull();
+      if (result.dimensions) {
+        // Should remain 100x100, not resized
+        expect(result.dimensions.width).toBe(100);
+        expect(result.dimensions.height).toBe(100);
+      }
+    });
+
+    it('should resize image just over max boundary', async () => {
+      const isSharpAvailable = await processor.isSharpAvailable();
+      if (!isSharpAvailable) {
+        return;
+      }
+
+      const sharp = await import('sharp');
+      const slightlyOverImage = await sharp.default({
+        create: {
+          width: 101,
+          height: 101,
+          channels: 4,
+          background: { r: 64, g: 64, b: 64, alpha: 1 }
+        }
+      }).png().toBuffer();
+
+      const options: ImageProcessorOptions = {
+        ...defaultOptions,
+        resizeMode: 'fit',
+        maxWidth: 100,
+        maxHeight: 100,
+      };
+
+      const result = await processor.processAndSave(
+        slightlyOverImage,
+        '.clipshot',
+        'resize_over_${seq3}',
+        options
+      );
+
+      expect(result.dimensions).not.toBeNull();
+      if (result.dimensions) {
+        // Should be resized to 100x100
+        expect(result.dimensions.width).toBe(100);
+        expect(result.dimensions.height).toBe(100);
+      }
     });
   });
 });

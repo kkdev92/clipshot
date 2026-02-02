@@ -9,6 +9,8 @@ import {
   VALID_PATTERN_TOKENS,
   PATTERN_TOKENS,
   DANGEROUS_SHELL_CHARS,
+  VALID_RESIZE_MODES,
+  RESIZE_PRESETS,
 } from '../core/constants';
 import { containsParentTraversal, isAbsolutePath } from '../security/path-validator';
 
@@ -169,6 +171,32 @@ export function validateJpegQuality(value: number): ValidationResult {
 }
 
 /**
+ * Validate the webpQuality setting
+ *
+ * @param value - The WebP quality value
+ * @returns Validation result
+ */
+export function validateWebpQuality(value: number): ValidationResult {
+  const errors: string[] = [];
+
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
+    errors.push('WebP quality must be an integer');
+    return { valid: false, errors };
+  }
+
+  if (value < LIMITS.MIN_WEBP_QUALITY || value > LIMITS.MAX_WEBP_QUALITY) {
+    errors.push(
+      `WebP quality must be between ${LIMITS.MIN_WEBP_QUALITY} and ${LIMITS.MAX_WEBP_QUALITY}`
+    );
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+/**
  * Validate the maxFileSizeMB setting
  *
  * @param value - The maximum file size in MB
@@ -220,6 +248,85 @@ export function validateAltLiteral(value: string): ValidationResult {
 }
 
 /**
+ * Validate resize mode
+ *
+ * @param value - The resize mode value
+ * @returns Validation result
+ */
+export function validateResizeMode(value: string): ValidationResult {
+  const errors: string[] = [];
+
+  // Use VALID_RESIZE_MODES constant for type-safe validation
+  if (!VALID_RESIZE_MODES.includes(value as typeof VALID_RESIZE_MODES[number])) {
+    errors.push(`Resize mode must be one of: ${VALID_RESIZE_MODES.join(', ')}`);
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+/**
+ * Validate image dimension (maxWidth/maxHeight)
+ *
+ * @param value - The dimension value (number or null)
+ * @param fieldName - Name of the field for error messages
+ * @returns Validation result
+ */
+export function validateImageDimension(
+  value: number | null,
+  fieldName: string
+): ValidationResult {
+  const errors: string[] = [];
+
+  if (value === null) {
+    return { valid: true, errors: [] };
+  }
+
+  if (typeof value !== 'number' || !Number.isInteger(value)) {
+    errors.push(`${fieldName} must be an integer or null`);
+    return { valid: false, errors };
+  }
+
+  if (value < LIMITS.MIN_IMAGE_DIMENSION || value > LIMITS.MAX_IMAGE_DIMENSION) {
+    errors.push(
+      `${fieldName} must be between ${LIMITS.MIN_IMAGE_DIMENSION} and ${LIMITS.MAX_IMAGE_DIMENSION}`
+    );
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+/**
+ * Validate resize preset
+ *
+ * @param value - The preset value (string or null)
+ * @returns Validation result
+ */
+export function validateResizePreset(value: string | null): ValidationResult {
+  const errors: string[] = [];
+
+  if (value === null) {
+    return { valid: true, errors: [] };
+  }
+
+  // Use RESIZE_PRESETS keys as source of truth for valid presets
+  const validPresets = Object.keys(RESIZE_PRESETS);
+  if (!validPresets.includes(value)) {
+    errors.push(`Resize preset must be one of: ${validPresets.join(', ')} or null`);
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+/**
  * Validate the entire extension configuration
  *
  * @param config - The configuration object
@@ -252,6 +359,12 @@ export function validateConfiguration(config: Partial<ExtensionConfig>): Validat
     allErrors.push(...result.errors);
   }
 
+  // Validate output.webpQuality
+  if (config.output?.webpQuality !== undefined) {
+    const result = validateWebpQuality(config.output.webpQuality);
+    allErrors.push(...result.errors);
+  }
+
   // Validate limits.maxFileSizeMB
   if (config.limits?.maxFileSizeMB !== undefined) {
     const result = validateMaxFileSizeMB(config.limits.maxFileSizeMB);
@@ -261,6 +374,30 @@ export function validateConfiguration(config: Partial<ExtensionConfig>): Validat
   // Validate insert.altLiteral
   if (config.insert?.altLiteral !== undefined) {
     const result = validateAltLiteral(config.insert.altLiteral);
+    allErrors.push(...result.errors);
+  }
+
+  // Validate resize.mode
+  if (config.resize?.mode !== undefined) {
+    const result = validateResizeMode(config.resize.mode);
+    allErrors.push(...result.errors);
+  }
+
+  // Validate resize.maxWidth
+  if (config.resize?.maxWidth !== undefined) {
+    const result = validateImageDimension(config.resize.maxWidth, 'Maximum width');
+    allErrors.push(...result.errors);
+  }
+
+  // Validate resize.maxHeight
+  if (config.resize?.maxHeight !== undefined) {
+    const result = validateImageDimension(config.resize.maxHeight, 'Maximum height');
+    allErrors.push(...result.errors);
+  }
+
+  // Validate resize.preset
+  if (config.resize?.preset !== undefined) {
+    const result = validateResizePreset(config.resize.preset);
     allErrors.push(...result.errors);
   }
 
@@ -329,5 +466,67 @@ export function sanitizeConfiguration(config: Partial<ExtensionConfig>): Partial
     };
   }
 
+  // Clamp resize dimensions to valid ranges
+  if (sanitized.resize?.maxWidth !== undefined && sanitized.resize.maxWidth !== null) {
+    sanitized.resize = {
+      ...sanitized.resize,
+      maxWidth: Math.max(
+        LIMITS.MIN_IMAGE_DIMENSION,
+        Math.min(LIMITS.MAX_IMAGE_DIMENSION, sanitized.resize.maxWidth)
+      ),
+    };
+  }
+
+  if (sanitized.resize?.maxHeight !== undefined && sanitized.resize.maxHeight !== null) {
+    sanitized.resize = {
+      ...sanitized.resize,
+      maxHeight: Math.max(
+        LIMITS.MIN_IMAGE_DIMENSION,
+        Math.min(LIMITS.MAX_IMAGE_DIMENSION, sanitized.resize.maxHeight)
+      ),
+    };
+  }
+
   return sanitized;
+}
+
+/**
+ * Get configuration warnings (non-blocking issues)
+ *
+ * Returns warnings for configuration combinations that are valid but may be
+ * confusing or have unexpected behavior:
+ * - Resize dimensions set when mode is 'off' (dimensions are ignored)
+ * - Preset set when manual dimensions are also set (preset overrides)
+ *
+ * @param config - The configuration object
+ * @returns Array of warning messages
+ */
+export function getConfigurationWarnings(config: Partial<ExtensionConfig>): string[] {
+  const warnings: string[] = [];
+
+  // Warn if resize dimensions are set but mode is 'off'
+  if (config.resize?.mode === 'off') {
+    if (config.resize.maxWidth !== null || config.resize.maxHeight !== null) {
+      warnings.push(
+        'resize.maxWidth and resize.maxHeight are ignored when resize.mode is "off"'
+      );
+    }
+  }
+
+  // Warn if preset is set and will override manual dimensions
+  if (config.resize?.preset !== null && config.resize?.preset !== undefined) {
+    if (config.resize.maxWidth !== null || config.resize.maxHeight !== null) {
+      // Check if preset exists in RESIZE_PRESETS
+      const presetKey = config.resize.preset;
+      if (presetKey in RESIZE_PRESETS) {
+        const preset = RESIZE_PRESETS[presetKey as keyof typeof RESIZE_PRESETS];
+        warnings.push(
+          `Preset "${presetKey}" overrides resize.maxWidth/maxHeight ` +
+          `(using ${preset.maxWidth}x${preset.maxHeight})`
+        );
+      }
+    }
+  }
+
+  return warnings;
 }

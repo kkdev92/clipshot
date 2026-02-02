@@ -9,8 +9,47 @@ import {
   NoWorkspaceError,
   getUserErrorMessage,
 } from '../core/errors';
+import { RESIZE_PRESETS } from '../core/constants';
 import { getClipboardManager } from '../clipboard/clipboard-manager';
 import { ImageProcessor } from '../image/image-processor';
+
+/**
+ * Resolve resize options from config, applying preset if set
+ *
+ * @param config - Extension configuration
+ * @param logger - Optional logger for warnings
+ * @returns Resolved maxWidth and maxHeight values
+ */
+function resolveResizeOptions(
+  config: ExtensionConfig,
+  logger?: Logger
+): {
+  maxWidth: number | null;
+  maxHeight: number | null;
+} {
+  // Preset overrides manual settings
+  if (config.resize.preset) {
+    const preset = RESIZE_PRESETS[config.resize.preset];
+
+    // Warn if user has manual settings that are being overridden
+    if (logger && (config.resize.maxWidth !== null || config.resize.maxHeight !== null)) {
+      logger.warn(
+        `Preset "${config.resize.preset}" overrides manual resize settings ` +
+        `(${config.resize.maxWidth}x${config.resize.maxHeight} -> ${preset.maxWidth}x${preset.maxHeight})`
+      );
+    }
+
+    return {
+      maxWidth: preset.maxWidth,
+      maxHeight: preset.maxHeight,
+    };
+  }
+
+  return {
+    maxWidth: config.resize.maxWidth,
+    maxHeight: config.resize.maxHeight,
+  };
+}
 
 /**
  * Resolve auto format based on language ID
@@ -126,6 +165,15 @@ export class PasteHandler {
       logger.debug('Processing image', { size: clipboardData.imageBuffer.length });
       const imageProcessor = new ImageProcessor(workspaceRoot);
 
+      // Resolve resize options (preset overrides manual settings)
+      const resizeOptions = resolveResizeOptions(config, logger);
+      logger.info('Resize config', {
+        mode: config.resize.mode,
+        preset: config.resize.preset,
+        maxWidth: resizeOptions.maxWidth,
+        maxHeight: resizeOptions.maxHeight,
+      });
+
       const processedImage = await imageProcessor.processAndSave(
         clipboardData.imageBuffer,
         config.saveDirectory,
@@ -135,12 +183,16 @@ export class PasteHandler {
           jpegQuality: config.output.jpegQuality,
           webpQuality: config.output.webpQuality,
           maxFileSizeMB: config.limits.maxFileSizeMB,
+          resizeMode: config.resize.mode,
+          maxWidth: resizeOptions.maxWidth,
+          maxHeight: resizeOptions.maxHeight,
         }
       );
 
       logger.info('Image saved', {
         path: processedImage.relativePath,
         size: processedImage.fileSize,
+        dimensions: processedImage.dimensions,
       });
 
       // Format the insert text

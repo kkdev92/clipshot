@@ -2,7 +2,7 @@
   "name": "clipshot",
   "displayName": "ClipShot",
   "description": "Paste clipboard images with automatic file saving - perfect for AI chat and documentation",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "publisher": "kkdev92",
   "author": {
     "name": "kkdev92",
@@ -114,6 +114,49 @@
           "minimum": 1,
           "maximum": 100,
           "description": "WebP quality (1-100)"
+        },
+        "clipshot.resize.mode": {
+          "type": "string",
+          "default": "off",
+          "enum": [
+            "off",
+            "fit"
+          ],
+          "enumDescriptions": [
+            "No resizing - save images at original size",
+            "Resize images to fit within maxWidth/maxHeight while maintaining aspect ratio"
+          ],
+          "description": "Image resize mode"
+        },
+        "clipshot.resize.maxWidth": {
+          "type": "integer",
+          "default": 1200,
+          "minimum": 1,
+          "maximum": 16384,
+          "description": "Maximum image width in pixels (1-16384). Ignored if preset is set."
+        },
+        "clipshot.resize.maxHeight": {
+          "type": "integer",
+          "default": 1200,
+          "minimum": 1,
+          "maximum": 16384,
+          "description": "Maximum image height in pixels (1-16384). Ignored if preset is set."
+        },
+        "clipshot.resize.preset": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "enum": [
+            null,
+            "ai-optimized"
+          ],
+          "enumDescriptions": [
+            "Use manual maxWidth/maxHeight settings",
+            "Optimized for AI chat (1200x1200 max, reduces token usage)"
+          ],
+          "description": "Resize preset. Overrides maxWidth/maxHeight when set."
         },
         "clipshot.insert.format": {
           "type": "string",

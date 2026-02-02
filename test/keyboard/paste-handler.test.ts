@@ -67,6 +67,12 @@ function createMockConfig(overrides: Partial<ExtensionConfig> = {}): ExtensionCo
       jpegQuality: 80,
       webpQuality: 80,
     },
+    resize: {
+      mode: 'off',
+      maxWidth: null,
+      maxHeight: null,
+      preset: null,
+    },
     insert: {
       format: 'auto',
       altSource: 'filename',

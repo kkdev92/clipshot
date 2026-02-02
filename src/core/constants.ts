@@ -43,6 +43,10 @@ export const DEFAULTS = {
   OUTPUT_FORMAT: 'png' as const,
   JPEG_QUALITY: 80,
   WEBP_QUALITY: 80,
+  RESIZE_MODE: 'off' as const,
+  RESIZE_MAX_WIDTH: 1200 as number | null,
+  RESIZE_MAX_HEIGHT: 1200 as number | null,
+  RESIZE_PRESET: null as 'ai-optimized' | null,
   INSERT_FORMAT: 'auto' as const,
   ALT_SOURCE: 'filename' as const,
   ALT_LITERAL: 'image',
@@ -84,9 +88,28 @@ export const LIMITS = {
   MAX_SEQUENCE_DIGITS: 6,
   MIN_JPEG_QUALITY: 1,
   MAX_JPEG_QUALITY: 100,
+  MIN_WEBP_QUALITY: 1,
+  MAX_WEBP_QUALITY: 100,
   MIN_FILE_SIZE_MB: 1,
   MAX_FILE_SIZE_MB: 100,
   MAX_FILE_NAME_LENGTH: 200,
+  MIN_IMAGE_DIMENSION: 1,
+  MAX_IMAGE_DIMENSION: 16384,
+} as const;
+
+/**
+ * Valid resize modes (for type-safe validation)
+ */
+export const VALID_RESIZE_MODES = ['off', 'fit'] as const;
+
+/**
+ * Resize preset configurations
+ */
+export const RESIZE_PRESETS = {
+  'ai-optimized': {
+    maxWidth: 1200,
+    maxHeight: 1200,
+  },
 } as const;
 
 /**
