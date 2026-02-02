@@ -97,7 +97,7 @@ jobs:
           # Native builds (npm ci installs correct platform binary)
           - os: ubuntu-latest
             target: linux-x64
-          - os: macos-13
+          - os: macos-15-intel
             target: darwin-x64
           - os: macos-latest
             target: darwin-arm64
