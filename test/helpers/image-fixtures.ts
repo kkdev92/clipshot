@@ -248,3 +248,25 @@ export const PARTIAL_PNG_HEADER = Buffer.from([
   0x49, 0x48, 0x44, 0x52, // IHDR type
   // Missing width and height
 ]);
+
+/**
+ * Create a valid PNG using Sharp (if available) for resize testing
+ * Falls back to VALID_PNG_BUFFER if Sharp is not available
+ */
+export async function createValidPngWithSize(width: number, height: number): Promise<Buffer> {
+  try {
+    const sharp = await import('sharp');
+    // Create a solid color PNG with the specified dimensions
+    return await sharp.default({
+      create: {
+        width,
+        height,
+        channels: 4,
+        background: { r: 255, g: 0, b: 0, alpha: 1 }
+      }
+    }).png().toBuffer();
+  } catch {
+    // Sharp not available, return the 1x1 valid PNG
+    return VALID_PNG_BUFFER;
+  }
+}

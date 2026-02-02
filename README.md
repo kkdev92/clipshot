@@ -43,10 +43,11 @@ ClipShot keeps it simple: **paste → saved → path inserted**.
 - **Smart Paste**: Press `Ctrl+Shift+V` (or `Cmd+Shift+V` on macOS) to paste clipboard images
 - **Non-intrusive**: Uses a dedicated shortcut to avoid conflicts with standard paste
 - **Automatic Saving**: Images are saved to a configurable directory in your workspace
+- **Image Resizing**: Automatically resize images to fit within specified dimensions (great for AI chat token optimization)
 - **Cross-Platform**: Works on Windows, macOS, and Linux
 - **Multiple Formats**: Supports PNG, JPEG, and WebP output formats
 - **Secure by Design**: Prevents command injection and path traversal attacks
-- **Configurable**: File naming, output format, quality settings, insertion format, and more
+- **Configurable**: File naming, output format, quality settings, resize options, insertion format, and more
 
 ---
 
@@ -101,15 +102,56 @@ By default (`auto` mode), ClipShot detects the file type and uses the appropriat
 
 ## Configuration
 
-| Setting                       | Default                                           | Description                             |
-| ----------------------------- | ------------------------------------------------- | --------------------------------------- |
-| `clipshot.enabled`            | `true`                                            | Enable/disable the extension            |
-| `clipshot.saveDirectory`      | `.clipshot`                                       | Directory to save images                |
-| `clipshot.fileName.pattern`   | `image_${yyyy}${MM}${dd}_${HH}${mm}${ss}_${seq3}` | File name pattern                       |
-| `clipshot.output.format`      | `png`                                             | Output format (png/jpeg/webp)           |
-| `clipshot.output.jpegQuality` | `80`                                              | JPEG quality (1-100)                    |
-| `clipshot.output.webpQuality` | `80`                                              | WebP quality (1-100)                    |
-| `clipshot.insert.format`      | `auto`                                            | Insert format (auto/path/markdown/html) |
+| Setting                       | Default                                           | Description                                          |
+| ----------------------------- | ------------------------------------------------- | ---------------------------------------------------- |
+| `clipshot.enabled`            | `true`                                            | Enable/disable the extension                         |
+| `clipshot.saveDirectory`      | `.clipshot`                                       | Directory to save images                             |
+| `clipshot.fileName.pattern`   | `image_${yyyy}${MM}${dd}_${HH}${mm}${ss}_${seq3}` | File name pattern                                    |
+| `clipshot.output.format`      | `png`                                             | Output format (png/jpeg/webp)                        |
+| `clipshot.output.jpegQuality` | `80`                                              | JPEG quality (1-100)                                 |
+| `clipshot.output.webpQuality` | `80`                                              | WebP quality (1-100)                                 |
+| `clipshot.resize.mode`        | `off`                                             | Resize mode (off/fit)                                |
+| `clipshot.resize.maxWidth`    | `1200`                                            | Maximum width in pixels (1-16384)                    |
+| `clipshot.resize.maxHeight`   | `1200`                                            | Maximum height in pixels (1-16384)                   |
+| `clipshot.resize.preset`      | `null`                                            | Resize preset (null/ai-optimized)                    |
+| `clipshot.insert.format`      | `auto`                                            | Insert format (auto/path/markdown/html)              |
+
+### Image Resizing
+
+ClipShot can automatically resize images to fit within specified dimensions while maintaining aspect ratio. This is useful for:
+
+- **AI Chat Optimization**: Reduce image size to lower token consumption when pasting into AI assistants
+- **Documentation**: Ensure consistent image sizes in your documentation
+
+#### Resize Modes
+
+- `off` - No resizing (default)
+- `fit` - Resize to fit within maxWidth/maxHeight while maintaining aspect ratio
+
+#### Resize Presets
+
+- `ai-optimized` - Optimized for AI chat (1200x1200 max, reduces token usage)
+
+When a preset is set, it overrides manual maxWidth/maxHeight settings.
+
+**Example: Enable AI-optimized resizing**
+
+```json
+{
+  "clipshot.resize.mode": "fit",
+  "clipshot.resize.preset": "ai-optimized"
+}
+```
+
+**Example: Custom dimensions**
+
+```json
+{
+  "clipshot.resize.mode": "fit",
+  "clipshot.resize.maxWidth": 800,
+  "clipshot.resize.maxHeight": 600
+}
+```
 
 ### File Name Pattern Tokens
 

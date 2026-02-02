@@ -4,10 +4,15 @@ import {
   validateFileNamePattern,
   validateSequenceDigits,
   validateJpegQuality,
+  validateWebpQuality,
   validateMaxFileSizeMB,
   validateAltLiteral,
+  validateResizeMode,
+  validateImageDimension,
+  validateResizePreset,
   validateConfiguration,
   sanitizeConfiguration,
+  getConfigurationWarnings,
 } from '../../src/config/validators';
 
 describe('validators', () => {
@@ -414,6 +419,309 @@ describe('validators', () => {
         const result = validateAltLiteral('value > 5');
         expect(result.valid).toBe(false);
       });
+    });
+  });
+
+  describe('validateResizeMode', () => {
+    it('should accept "off"', () => {
+      const result = validateResizeMode('off');
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should accept "fit"', () => {
+      const result = validateResizeMode('fit');
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should reject invalid mode', () => {
+      const result = validateResizeMode('invalid');
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes('off') && e.includes('fit'))).toBe(true);
+    });
+
+    it('should reject empty string', () => {
+      const result = validateResizeMode('');
+      expect(result.valid).toBe(false);
+    });
+  });
+
+  describe('validateImageDimension', () => {
+    it('should accept null value', () => {
+      const result = validateImageDimension(null, 'maxWidth');
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should accept valid positive integer', () => {
+      const result = validateImageDimension(1200, 'maxWidth');
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should accept minimum value (1)', () => {
+      const result = validateImageDimension(1, 'maxWidth');
+      expect(result.valid).toBe(true);
+    });
+
+    it('should accept maximum value (16384)', () => {
+      const result = validateImageDimension(16384, 'maxHeight');
+      expect(result.valid).toBe(true);
+    });
+
+    it('should reject zero', () => {
+      const result = validateImageDimension(0, 'maxWidth');
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes('between'))).toBe(true);
+    });
+
+    it('should reject negative value', () => {
+      const result = validateImageDimension(-100, 'maxWidth');
+      expect(result.valid).toBe(false);
+    });
+
+    it('should reject value exceeding maximum', () => {
+      const result = validateImageDimension(20000, 'maxWidth');
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes('16384'))).toBe(true);
+    });
+
+    it('should reject non-integer float', () => {
+      const result = validateImageDimension(100.5, 'maxWidth');
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes('integer'))).toBe(true);
+    });
+
+    it('should include field name in error message', () => {
+      const result = validateImageDimension(-1, 'Maximum width');
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes('Maximum width'))).toBe(true);
+    });
+  });
+
+  describe('validateResizePreset', () => {
+    it('should accept null', () => {
+      const result = validateResizePreset(null);
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should accept "ai-optimized"', () => {
+      const result = validateResizePreset('ai-optimized');
+      expect(result.valid).toBe(true);
+      expect(result.errors).toHaveLength(0);
+    });
+
+    it('should reject invalid preset', () => {
+      const result = validateResizePreset('invalid-preset');
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes('ai-optimized'))).toBe(true);
+    });
+
+    it('should reject empty string', () => {
+      const result = validateResizePreset('');
+      expect(result.valid).toBe(false);
+    });
+  });
+
+  describe('validateConfiguration with resize options', () => {
+    it('should validate resize.mode', () => {
+      const result = validateConfiguration({
+        resize: {
+          mode: 'invalid' as 'off' | 'fit',
+          maxWidth: null,
+          maxHeight: null,
+          preset: null,
+        },
+      });
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes('mode'))).toBe(true);
+    });
+
+    it('should validate resize.maxWidth', () => {
+      const result = validateConfiguration({
+        resize: {
+          mode: 'fit',
+          maxWidth: -100,
+          maxHeight: null,
+          preset: null,
+        },
+      });
+      expect(result.valid).toBe(false);
+    });
+
+    it('should validate resize.maxHeight', () => {
+      const result = validateConfiguration({
+        resize: {
+          mode: 'fit',
+          maxWidth: null,
+          maxHeight: 20000,
+          preset: null,
+        },
+      });
+      expect(result.valid).toBe(false);
+    });
+
+    it('should validate resize.preset', () => {
+      const result = validateConfiguration({
+        resize: {
+          mode: 'fit',
+          maxWidth: null,
+          maxHeight: null,
+          preset: 'invalid' as 'ai-optimized' | null,
+        },
+      });
+      expect(result.valid).toBe(false);
+    });
+
+    it('should accept valid resize configuration', () => {
+      const result = validateConfiguration({
+        resize: {
+          mode: 'fit',
+          maxWidth: 1200,
+          maxHeight: 1200,
+          preset: 'ai-optimized',
+        },
+      });
+      expect(result.valid).toBe(true);
+    });
+  });
+
+  describe('sanitizeConfiguration with resize options', () => {
+    it('should clamp maxWidth to valid range', () => {
+      const result = sanitizeConfiguration({
+        resize: {
+          mode: 'fit',
+          maxWidth: 20000,
+          maxHeight: null,
+          preset: null,
+        },
+      });
+      expect(result.resize?.maxWidth).toBe(16384);
+    });
+
+    it('should clamp maxHeight to valid range', () => {
+      const result = sanitizeConfiguration({
+        resize: {
+          mode: 'fit',
+          maxWidth: null,
+          maxHeight: 0,
+          preset: null,
+        },
+      });
+      expect(result.resize?.maxHeight).toBe(1);
+    });
+
+    it('should not modify null values', () => {
+      const result = sanitizeConfiguration({
+        resize: {
+          mode: 'fit',
+          maxWidth: null,
+          maxHeight: null,
+          preset: null,
+        },
+      });
+      expect(result.resize?.maxWidth).toBeNull();
+      expect(result.resize?.maxHeight).toBeNull();
+    });
+  });
+
+  describe('validateWebpQuality', () => {
+    it('should accept valid quality values', () => {
+      expect(validateWebpQuality(1).valid).toBe(true);
+      expect(validateWebpQuality(50).valid).toBe(true);
+      expect(validateWebpQuality(80).valid).toBe(true);
+      expect(validateWebpQuality(100).valid).toBe(true);
+    });
+
+    it('should reject quality below minimum', () => {
+      const result = validateWebpQuality(0);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes('WebP quality'))).toBe(true);
+    });
+
+    it('should reject quality above maximum', () => {
+      const result = validateWebpQuality(101);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes('WebP quality'))).toBe(true);
+    });
+
+    it('should reject negative values', () => {
+      const result = validateWebpQuality(-10);
+      expect(result.valid).toBe(false);
+    });
+
+    it('should reject non-integer values', () => {
+      const result = validateWebpQuality(80.5);
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes('integer'))).toBe(true);
+    });
+  });
+
+  describe('getConfigurationWarnings', () => {
+    it('should warn when resize dimensions are set but mode is off', () => {
+      const warnings = getConfigurationWarnings({
+        resize: {
+          mode: 'off',
+          maxWidth: 1200,
+          maxHeight: 1200,
+          preset: null,
+        },
+      });
+      expect(warnings.length).toBe(1);
+      expect(warnings[0]).toContain('ignored');
+      expect(warnings[0]).toContain('off');
+    });
+
+    it('should warn when preset overrides manual dimensions', () => {
+      const warnings = getConfigurationWarnings({
+        resize: {
+          mode: 'fit',
+          maxWidth: 800,
+          maxHeight: 600,
+          preset: 'ai-optimized',
+        },
+      });
+      expect(warnings.length).toBe(1);
+      expect(warnings[0]).toContain('overrides');
+      expect(warnings[0]).toContain('ai-optimized');
+    });
+
+    it('should not warn when mode is fit with dimensions and no preset', () => {
+      const warnings = getConfigurationWarnings({
+        resize: {
+          mode: 'fit',
+          maxWidth: 800,
+          maxHeight: 600,
+          preset: null,
+        },
+      });
+      expect(warnings.length).toBe(0);
+    });
+
+    it('should not warn when mode is off with null dimensions', () => {
+      const warnings = getConfigurationWarnings({
+        resize: {
+          mode: 'off',
+          maxWidth: null,
+          maxHeight: null,
+          preset: null,
+        },
+      });
+      expect(warnings.length).toBe(0);
+    });
+
+    it('should not warn when preset is set but no manual dimensions', () => {
+      const warnings = getConfigurationWarnings({
+        resize: {
+          mode: 'fit',
+          maxWidth: null,
+          maxHeight: null,
+          preset: 'ai-optimized',
+        },
+      });
+      expect(warnings.length).toBe(0);
     });
   });
 });

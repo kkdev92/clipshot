@@ -28,6 +28,16 @@ export type AltSource = 'filename' | 'literal';
 export type NotificationLevel = 'all' | 'errors' | 'none';
 
 /**
+ * Resize mode
+ */
+export type ResizeMode = 'off' | 'fit';
+
+/**
+ * Resize preset
+ */
+export type ResizePreset = 'ai-optimized';
+
+/**
  * Log level
  */
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent';
@@ -104,6 +114,12 @@ export interface ExtensionConfig {
     format: ImageFormat;
     jpegQuality: number;
     webpQuality: number;
+  };
+  resize: {
+    mode: ResizeMode;
+    maxWidth: number | null;
+    maxHeight: number | null;
+    preset: ResizePreset | null;
   };
   insert: {
     format: InsertFormat;
