@@ -18,10 +18,8 @@ esbuild.mjs
 .env.*
 !.env.example
 
-# Build artifacts - only keep bundled extension and sharp native modules
-node_modules/**
-!node_modules/sharp/**
-!node_modules/@img/**
+# node_modules - managed by bundleDependencies in package.json
+# sharp and all its dependencies are automatically included
 work/**
 
 # Documentation (keep README)
@@ -34,6 +32,7 @@ docs/**
 *.vsix
 *.map
 .clipshot/**
+.vsix-verify-temp/**
 
 # Old tsc output (only keep bundled extension.js)
 dist/**/*.d.ts

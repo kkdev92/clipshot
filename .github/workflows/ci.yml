@@ -113,6 +113,9 @@ jobs:
       - name: Package extension
         run: npm run package
 
+      - name: Verify VSIX dependencies
+        run: node scripts/verify-vsix.mjs
+
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v4
         with:

@@ -44,6 +44,7 @@ type SharpModule = {
 
 let sharpModule: SharpModule | null = null;
 let sharpLoadAttempted = false;
+let sharpLoadError: unknown = null;
 
 /**
  * Try to load Sharp module
@@ -59,10 +60,18 @@ async function loadSharp(): Promise<SharpModule | null> {
     // Dynamic import to handle cases where Sharp is not available
     sharpModule = (await import('sharp')) as SharpModule;
     return sharpModule;
-  } catch {
-    // Sharp not available (e.g., ARM64 without prebuilt binary)
+  } catch (error) {
+    // Sharp not available - save error for later retrieval
+    sharpLoadError = error;
     return null;
   }
+}
+
+/**
+ * Get the error that occurred when loading Sharp (if any)
+ */
+export function getSharpLoadError(): unknown {
+  return sharpLoadError;
 }
 
 /**
@@ -290,10 +299,11 @@ export class ImageProcessor {
    * - Extracts PNG dimensions from header if possible
    * - Passes through the original buffer without format conversion
    *
-   * Note: Format conversion is not available in this mode.
+   * Note: Format conversion and resize are NOT available in this mode.
+   * The caller should check isSharpAvailable() and warn the user if needed.
    *
    * @param buffer - Raw image data buffer
-   * @param _options - Processing options (format conversion not supported)
+   * @param _options - Processing options (format conversion/resize not supported)
    * @returns Original buffer and extracted dimensions (if PNG)
    * @throws ImageProcessingError if buffer is not a valid image
    */
@@ -302,6 +312,7 @@ export class ImageProcessor {
     _options: ImageProcessorOptions
   ): { processedBuffer: Buffer; dimensions: ImageDimensions | null } {
     // Without Sharp, we can only pass through the original buffer
+    // Resize and format conversion are skipped - caller warned via isSharpAvailable()
     // Try to extract dimensions from PNG header if it's a PNG
     const dimensions = this.extractPngDimensions(buffer);
 
