@@ -3,7 +3,7 @@
  * Handles format conversion, optimization, and metadata extraction
  */
 
-import type { ImageFormat, ProcessedImage, ImageDimensions, ResizeMode } from '../core/types';
+import type { ImageFormat, ProcessedImage, ImageDimensions, ResizeMode, Logger } from '../core/types';
 import { ImageProcessingError, FileSizeLimitError } from '../core/errors';
 import { LIMITS } from '../core/constants';
 import { PathGenerator } from './path-generator';
@@ -100,10 +100,12 @@ export interface ImageProcessorOptions {
 export class ImageProcessor {
   private readonly pathGenerator: PathGenerator;
   private readonly fileWriter: FileWriter;
+  private readonly logger?: Logger;
 
-  constructor(workspaceRoot: string) {
+  constructor(workspaceRoot: string, logger?: Logger) {
     this.pathGenerator = new PathGenerator(workspaceRoot);
     this.fileWriter = new FileWriter(workspaceRoot);
+    this.logger = logger;
   }
 
   /**
@@ -121,6 +123,12 @@ export class ImageProcessor {
     fileNamePattern: string,
     options: ImageProcessorOptions
   ): Promise<ProcessedImage> {
+    this.logger?.debug('Starting image processing', {
+      inputSize: imageBuffer.length,
+      format: options.format,
+      resizeMode: options.resizeMode,
+    });
+
     // Check initial buffer size
     const initialSizeMB = imageBuffer.length / (1024 * 1024);
     if (initialSizeMB > options.maxFileSizeMB) {
@@ -129,6 +137,11 @@ export class ImageProcessor {
 
     // Process the image
     const { processedBuffer, dimensions } = await this.processImage(imageBuffer, options);
+
+    this.logger?.debug('Image processed', {
+      outputSize: processedBuffer.length,
+      dimensions,
+    });
 
     // Check processed size
     const processedSizeMB = processedBuffer.length / (1024 * 1024);
@@ -147,6 +160,11 @@ export class ImageProcessor {
 
     // Generate relative path
     const relativePath = this.pathGenerator.generateRelativePath(writeResult.absolutePath);
+
+    this.logger?.debug('Image file written', {
+      path: relativePath,
+      size: writeResult.fileSize,
+    });
 
     return {
       absolutePath: writeResult.absolutePath,
@@ -175,8 +193,10 @@ export class ImageProcessor {
     const sharp = await loadSharp();
 
     if (sharp) {
+      this.logger?.debug('Using Sharp for image processing');
       return this.processWithSharp(sharp, buffer, options);
     } else {
+      this.logger?.debug('Sharp not available, using fallback processing');
       return this.processWithoutSharp(buffer, options);
     }
   }

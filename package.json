@@ -2,7 +2,7 @@
   "name": "clipshot",
   "displayName": "ClipShot",
   "description": "Paste clipboard images with automatic file saving - perfect for AI chat and documentation",
-  "version": "0.1.8",
+  "version": "0.1.10",
   "publisher": "kkdev92",
   "author": {
     "name": "kkdev92",
@@ -66,6 +66,7 @@
           "type": "string",
           "default": "info",
           "enum": [
+            "trace",
             "debug",
             "info",
             "warn",
@@ -255,7 +256,7 @@
     "vitest": "^3.0.0"
   },
   "dependencies": {
-    "@kkdev92/vscode-ext-kit": "^0.1.1",
+    "@kkdev92/vscode-ext-kit": "^0.2.0",
     "sharp": "^0.34.0"
   },
   "bundleDependencies": [

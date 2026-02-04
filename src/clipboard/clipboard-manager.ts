@@ -2,7 +2,7 @@
  * Clipboard manager - factory for platform-specific providers
  */
 
-import type { ClipboardData, Platform } from '../core/types';
+import type { ClipboardData, Platform, Logger } from '../core/types';
 import { PlatformNotSupportedError, ClipboardError } from '../core/errors';
 import { getPlatform } from '../security/sanitizer';
 import type { IClipboardProvider } from './clipboard-provider';
@@ -35,10 +35,12 @@ export function createClipboardProvider(): IClipboardProvider {
 export class ClipboardManager {
   private readonly provider: IClipboardProvider;
   private readonly platform: Platform;
+  private readonly logger?: Logger;
 
-  constructor(provider?: IClipboardProvider) {
+  constructor(provider?: IClipboardProvider, logger?: Logger) {
     this.platform = getPlatform();
     this.provider = provider ?? createClipboardProvider();
+    this.logger = logger;
   }
 
   /**
@@ -50,9 +52,13 @@ export class ClipboardManager {
    * @returns True if clipboard access is available, false otherwise
    */
   async isAvailable(): Promise<boolean> {
+    this.logger?.debug('Checking clipboard availability', { platform: this.platform });
     try {
-      return await this.provider.isAvailable();
-    } catch {
+      const available = await this.provider.isAvailable();
+      this.logger?.debug('Clipboard availability result', { available });
+      return available;
+    } catch (error) {
+      this.logger?.warn('Clipboard availability check failed', error);
       return false;
     }
   }
@@ -66,9 +72,13 @@ export class ClipboardManager {
    * @returns True if clipboard contains an image, false otherwise
    */
   async hasImage(): Promise<boolean> {
+    this.logger?.debug('Checking if clipboard has image');
     try {
-      return await this.provider.hasImage();
-    } catch {
+      const hasImage = await this.provider.hasImage();
+      this.logger?.debug('Clipboard hasImage result', { hasImage });
+      return hasImage;
+    } catch (error) {
+      this.logger?.warn('Clipboard hasImage check failed', error);
       return false;
     }
   }
@@ -83,6 +93,7 @@ export class ClipboardManager {
    * @throws ClipboardError if clipboard access is unavailable or reading fails
    */
   async getImageData(): Promise<ClipboardData> {
+    this.logger?.debug('Getting image data from clipboard');
     const isAvailable = await this.isAvailable();
     if (!isAvailable) {
       throw new ClipboardError(
@@ -91,7 +102,12 @@ export class ClipboardManager {
       );
     }
 
-    return await this.provider.getImageData();
+    const data = await this.provider.getImageData();
+    this.logger?.debug('Image data retrieved', {
+      hasImage: data.hasImage,
+      size: data.imageBuffer?.length ?? 0,
+    });
+    return data;
   }
 
   /**
@@ -101,6 +117,7 @@ export class ClipboardManager {
    * Should be called after the image data is no longer needed.
    */
   async cleanup(): Promise<void> {
+    this.logger?.debug('Cleaning up clipboard resources');
     await this.provider.cleanup();
   }
 
@@ -128,10 +145,12 @@ let globalClipboardManager: ClipboardManager | null = null;
 
 /**
  * Get the global ClipboardManager instance
+ *
+ * @param logger - Optional logger instance for debugging
  */
-export function getClipboardManager(): ClipboardManager {
+export function getClipboardManager(logger?: Logger): ClipboardManager {
   if (!globalClipboardManager) {
-    globalClipboardManager = new ClipboardManager();
+    globalClipboardManager = new ClipboardManager(undefined, logger);
   }
   return globalClipboardManager;
 }
