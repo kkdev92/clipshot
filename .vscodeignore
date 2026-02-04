@@ -16,7 +16,7 @@ esbuild.mjs
 # Environment and secrets
 .env
 .env.*
-!.env.example
+.env.example
 
 # node_modules - managed by bundleDependencies in package.json
 # sharp and all its dependencies are automatically included
@@ -26,6 +26,22 @@ work/**
 CONTRIBUTING.md
 SECURITY.md
 docs/**
+
+# Test coverage
+coverage/**
+
+# GitHub files (not needed by users)
+.github/**
+
+# Development scripts
+scripts/**
+
+# Source maps (not needed for production)
+dist/**/*.map
+
+# Sharp build files (pre-built binaries are used)
+node_modules/sharp/src/**
+node_modules/sharp/install/**
 
 # Other
 .mcp.json

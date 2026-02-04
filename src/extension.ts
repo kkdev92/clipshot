@@ -9,16 +9,20 @@ import {
   registerCommands,
   getSetting,
   onConfigChange,
+  showInfo,
+  showError,
+  withProgress,
 } from '@kkdev92/vscode-ext-kit';
-import type { ExtensionConfig, LogLevel, ImageFormat, InsertFormat, AltSource, NotificationLevel, ResizeMode, ResizePreset } from './core/types';
+import type { LogLevel } from '@kkdev92/vscode-ext-kit';
+import type { ExtensionConfig, ImageFormat, InsertFormat, AltSource, NotificationLevel, ResizeMode, ResizePreset } from './core/types';
 import { EXTENSION_ID, COMMANDS, CONTEXT_KEYS, DEFAULTS, CONFIG_PREFIX } from './core/constants';
 import { validateConfiguration, sanitizeConfiguration } from './config/validators';
 import { getPasteHandler } from './keyboard/paste-handler';
 import { disposeGlobalClipboardManager } from './clipboard/clipboard-manager';
 import { disposeGlobalTempFileManager } from './security/temp-file-manager';
 
-// Logger instance
-let logger: ReturnType<typeof createLogger> | null = null;
+// Logger instance (initialized in activate)
+let logger: ReturnType<typeof createLogger>;
 
 /**
  * Load extension configuration from VS Code settings
@@ -77,7 +81,7 @@ function loadConfiguration(): ExtensionConfig {
  */
 function validateAndLogConfig(config: ExtensionConfig): void {
   const result = validateConfiguration(config);
-  if (!result.valid && logger) {
+  if (!result.valid && logger !== undefined) {
     for (const error of result.errors) {
       logger.warn(`Configuration warning: ${error}`);
     }
@@ -85,33 +89,26 @@ function validateAndLogConfig(config: ExtensionConfig): void {
 }
 
 /**
- * Show notification based on user's notification level setting
- *
- * Respects the user's preference for notification verbosity:
- * - 'all': Show both info and error notifications
- * - 'errors': Only show error notifications
- * - 'none': Suppress all notifications
+ * Show success notification if notification level allows
  *
  * @param message - The notification message to display
- * @param type - Notification type ('info' for success, 'error' for failures)
  * @param level - User configured notification level preference
  */
-function showNotification(
-  message: string,
-  type: 'info' | 'error',
-  level: NotificationLevel
-): void {
-  if (level === 'none') {
-    return;
+function notifySuccess(message: string, level: NotificationLevel): void {
+  if (level === 'all') {
+    void showInfo(message);
   }
-  if (level === 'errors' && type !== 'error') {
-    return;
-  }
+}
 
-  if (type === 'error') {
-    void vscode.window.showErrorMessage(message);
-  } else {
-    void vscode.window.showInformationMessage(message);
+/**
+ * Show error notification if notification level allows
+ *
+ * @param message - The notification message to display
+ * @param level - User configured notification level preference
+ */
+function notifyError(message: string, level: NotificationLevel): void {
+  if (level !== 'none') {
+    void showError(message);
   }
 }
 
@@ -134,9 +131,10 @@ export function activate(context: vscode.ExtensionContext): void {
   // Load initial configuration
   let config = loadConfiguration();
 
-  // Create logger
+  // Create logger with config section for automatic log level sync
   logger = createLogger(EXTENSION_ID, {
-    level: config.logLevel,
+    level: config.logLevel as LogLevel,
+    configSection: `${CONFIG_PREFIX}.logLevel`,
   });
   context.subscriptions.push(logger);
 
@@ -154,8 +152,9 @@ export function activate(context: vscode.ExtensionContext): void {
       config = loadConfiguration();
       validateAndLogConfig(config);
       updateContextKeys(config);
-      logger?.setLevel(config.logLevel);
-      logger?.info('Configuration updated');
+      // Note: logger.setLevel() is not needed here because
+      // configSection option enables automatic log level sync
+      logger.info('Configuration updated');
     })
   );
 
@@ -165,14 +164,18 @@ export function activate(context: vscode.ExtensionContext): void {
   // Register commands
   registerCommands(context, logger, {
     [COMMANDS.PASTE_IMAGE]: async () => {
-      if (!logger) {
-        return;
-      }
-
       const currentConfig = loadConfiguration();
       logger.debug('Paste command triggered');
 
-      const result = await pasteHandler.handlePaste(currentConfig, logger);
+      // Use withProgress to show progress indicator
+      const result = await withProgress(
+        'ClipShot',
+        async (progress) => {
+          progress.report({ message: 'Reading clipboard...' });
+          return pasteHandler.handlePaste(currentConfig, logger);
+        },
+        { cancellable: false }
+      );
 
       if (result.success) {
         if (result.processedImage) {
@@ -184,24 +187,21 @@ export function activate(context: vscode.ExtensionContext): void {
 
           if (result.copiedToClipboard === true) {
             // Path copied to clipboard - user needs to paste manually
-            showNotification(
+            notifySuccess(
               `Image saved! Path copied - press Ctrl+V to paste: ${img.relativePath}`,
-              'info',
               currentConfig.notifications.level
             );
           } else {
             // Path inserted directly
-            showNotification(
+            notifySuccess(
               `Image saved: ${img.relativePath} (${sizeMB}MB${dims})`,
-              'info',
               currentConfig.notifications.level
             );
           }
         }
       } else if (result.error !== undefined && result.error !== '') {
-        showNotification(
+        notifyError(
           `Paste failed: ${result.error}`,
-          'error',
           currentConfig.notifications.level
         );
       }
@@ -215,11 +215,11 @@ export function activate(context: vscode.ExtensionContext): void {
  * Extension deactivation
  */
 export async function deactivate(): Promise<void> {
-  logger?.info('Deactivating extension');
+  logger.info('Deactivating extension');
 
   // Clean up resources
   await disposeGlobalClipboardManager();
   await disposeGlobalTempFileManager();
 
-  logger?.info('Extension deactivated');
+  logger.info('Extension deactivated');
 }

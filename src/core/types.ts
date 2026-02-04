@@ -38,26 +38,9 @@ export type ResizeMode = 'off' | 'fit';
 export type ResizePreset = 'ai-optimized';
 
 /**
- * Log level
+ * Re-export Logger and LogLevel from vscode-ext-kit
  */
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent';
-
-/**
- * Logger interface for extension logging
- * Compatible with @kkdev92/vscode-ext-kit logger
- */
-export interface Logger {
-  /** Log debug level message */
-  debug(msg: string, meta?: object): void;
-  /** Log info level message */
-  info(msg: string, meta?: object): void;
-  /** Log warning level message */
-  warn(msg: string, meta?: object): void;
-  /** Log error level message */
-  error(msg: string, error?: unknown): void;
-  /** Set the log level */
-  setLevel(level: LogLevel): void;
-}
+export type { Logger, LogLevel } from '@kkdev92/vscode-ext-kit';
 
 /**
  * Clipboard data returned from clipboard providers

@@ -92,13 +92,6 @@ export class PasteHandler {
    *
    * @param config - Extension configuration
    * @param logger - Logger instance
-   * @returns Paste result
-   */
-  /**
-   * Handle paste command
-   *
-   * @param config - Extension configuration
-   * @param logger - Logger instance
    * @returns Paste result with success status and processed image info
    */
   async handlePaste(
@@ -125,7 +118,7 @@ export class PasteHandler {
     logger: Logger
   ): Promise<PasteResult> {
     const editor = vscode.window.activeTextEditor;
-    const clipboardManager = getClipboardManager();
+    const clipboardManager = getClipboardManager(logger);
 
     try {
       // Check if extension is enabled
@@ -150,7 +143,7 @@ export class PasteHandler {
 
       // Process and save the image
       logger.debug('Processing image', { size: clipboardData.imageBuffer.length });
-      const imageProcessor = new ImageProcessor(workspaceRoot);
+      const imageProcessor = new ImageProcessor(workspaceRoot, logger);
 
       // Check Sharp availability
       const sharpAvailable = await imageProcessor.isSharpAvailable();
