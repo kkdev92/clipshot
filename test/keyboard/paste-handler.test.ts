@@ -142,7 +142,7 @@ describe('PasteHandler', () => {
       processAndSave: vi.fn(),
       isSharpAvailable: vi.fn().mockResolvedValue(true),
     };
-    vi.mocked(ImageProcessor).mockImplementation(() => mockImageProcessor as never);
+    vi.mocked(ImageProcessor).mockImplementation(function () { return mockImageProcessor; } as never);
 
     // Reset vscode mocks
     (vscode.window as { activeTextEditor?: unknown }).activeTextEditor = undefined;

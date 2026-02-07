@@ -2,7 +2,7 @@
   "name": "clipshot",
   "displayName": "ClipShot",
   "description": "Paste clipboard images with automatic file saving - perfect for AI chat and documentation",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "publisher": "kkdev92",
   "author": {
     "name": "kkdev92",
@@ -18,7 +18,7 @@
     "url": "https://github.com/kkdev92/clipshot/issues"
   },
   "engines": {
-    "vscode": "^1.90.0"
+    "vscode": "^1.96.0"
   },
   "categories": [
     "Formatters",
@@ -240,26 +240,26 @@
     "clean": "rimraf dist out"
   },
   "devDependencies": {
-    "@eslint/js": "^9.0.0",
+    "@eslint/js": "^9.39.2",
     "@types/glob": "^8.1.0",
-    "@types/mocha": "^10.0.0",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^22.0.0",
-    "@types/vscode": "^1.90.0",
-    "@vitest/coverage-v8": "^3.0.0",
-    "@vscode/test-electron": "^2.4.0",
-    "@vscode/vsce": "^3.0.0",
-    "esbuild": "^0.27.2",
-    "eslint": "^9.0.0",
-    "glob": "^10.0.0",
-    "mocha": "^10.0.0",
-    "rimraf": "^6.0.0",
-    "typescript": "^5.4.0",
-    "typescript-eslint": "^8.0.0",
-    "vitest": "^3.0.0"
+    "@types/vscode": "^1.96.0",
+    "@vitest/coverage-v8": "^4.0.17",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.27.3",
+    "eslint": "^9.39.2",
+    "glob": "^11.0.0",
+    "mocha": "^11.7.5",
+    "rimraf": "^6.1.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.54.0",
+    "vitest": "^4.0.18"
   },
   "dependencies": {
-    "@kkdev92/vscode-ext-kit": "^0.2.0",
-    "sharp": "^0.34.0"
+    "@kkdev92/vscode-ext-kit": "^0.2.2",
+    "sharp": "^0.34.5"
   },
   "bundleDependencies": [
     "@kkdev92/vscode-ext-kit",
