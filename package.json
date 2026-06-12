@@ -258,7 +258,7 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "@kkdev92/vscode-ext-kit": "^0.2.2",
+    "@kkdev92/vscode-ext-kit": "^0.4.0",
     "sharp": "^0.34.5"
   },
   "bundleDependencies": [
