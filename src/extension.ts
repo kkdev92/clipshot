@@ -133,7 +133,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Create logger with config section for automatic log level sync
   logger = createLogger(EXTENSION_ID, {
-    level: config.logLevel as LogLevel,
+    level: config.logLevel,
     configSection: `${CONFIG_PREFIX}.logLevel`,
   });
   context.subscriptions.push(logger);

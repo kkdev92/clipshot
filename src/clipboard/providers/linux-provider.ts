@@ -3,17 +3,18 @@
  * Supports both X11 (xclip) and Wayland (wl-paste)
  */
 
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
-import * as fs from 'fs/promises';
 import type { ClipboardData } from '../../core/types';
 import { ClipboardError } from '../../core/errors';
-import { TIMEOUTS } from '../../core/constants';
+import { TIMEOUTS, LIMITS } from '../../core/constants';
 import { BaseClipboardProvider } from '../clipboard-provider';
-import { getTempFileManager } from '../../security/temp-file-manager';
-import { escapeShellArg } from '../../security/sanitizer';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+// Upper bound for image data read from the clipboard via stdout
+const MAX_CLIPBOARD_BYTES = LIMITS.MAX_FILE_SIZE_MB * 1024 * 1024;
 
 /**
  * Detect display server type
@@ -23,10 +24,13 @@ type DisplayServer = 'x11' | 'wayland' | 'unknown';
 /**
  * Linux clipboard provider
  * Automatically detects and uses appropriate tool (xclip or wl-paste)
+ *
+ * The clipboard is read in two process spawns per paste: one to list the
+ * offered MIME types (answers "has image?", "has text?" and selects the
+ * format to request) and one to read the image bytes straight from stdout.
+ * No temp files and no shell redirection are involved.
  */
 export class LinuxClipboardProvider extends BaseClipboardProvider {
-  private readonly tempFileManager = getTempFileManager();
-  private currentTempFile: string | null = null;
   private displayServer: DisplayServer | null = null;
   private availableTool: 'xclip' | 'wl-paste' | null = null;
 
@@ -89,6 +93,47 @@ export class LinuxClipboardProvider extends BaseClipboardProvider {
     }
   }
 
+  /**
+   * List the MIME types currently offered by the clipboard.
+   * One process spawn answers image presence, text presence, and which
+   * image format to request.
+   */
+  private async listClipboardTypes(): Promise<string> {
+    if (!this.availableTool) {
+      return '';
+    }
+
+    try {
+      if (this.availableTool === 'wl-paste') {
+        const { stdout } = await execAsync('wl-paste --list-types 2>/dev/null || true', {
+          timeout: TIMEOUTS.CLIPBOARD_READ,
+        });
+        return stdout;
+      }
+      const { stdout } = await execAsync(
+        'xclip -selection clipboard -t TARGETS -o 2>/dev/null || true',
+        { timeout: TIMEOUTS.CLIPBOARD_READ }
+      );
+      return stdout;
+    } catch {
+      return '';
+    }
+  }
+
+  private static hasImageType(types: string): 'image/png' | 'image/jpeg' | null {
+    if (types.includes('image/png')) {
+      return 'image/png';
+    }
+    if (types.includes('image/jpeg')) {
+      return 'image/jpeg';
+    }
+    return null;
+  }
+
+  private static hasTextType(types: string): boolean {
+    return types.includes('text/plain') || types.includes('UTF8_STRING');
+  }
+
   async hasImage(): Promise<boolean> {
     await this.detectEnvironment();
 
@@ -96,44 +141,22 @@ export class LinuxClipboardProvider extends BaseClipboardProvider {
       return false;
     }
 
-    try {
-      if (this.availableTool === 'wl-paste') {
-        // Check if clipboard has image
-        const { stdout } = await execAsync('wl-paste --list-types 2>/dev/null || true', {
-          timeout: TIMEOUTS.CLIPBOARD_READ,
-        });
-        return stdout.includes('image/png') || stdout.includes('image/jpeg');
-      } else {
-        // xclip - check targets
-        const { stdout } = await execAsync(
-          'xclip -selection clipboard -t TARGETS -o 2>/dev/null || true',
-          { timeout: TIMEOUTS.CLIPBOARD_READ }
-        );
-        return stdout.includes('image/png') || stdout.includes('image/jpeg');
-      }
-    } catch {
-      return false;
-    }
+    return LinuxClipboardProvider.hasImageType(await this.listClipboardTypes()) !== null;
   }
 
   async getImageData(): Promise<ClipboardData> {
     await this.detectEnvironment();
 
-    // Clean up previous temp file if any
-    await this.cleanup();
-
     if (!this.availableTool) {
       throw new ClipboardError('No clipboard tool available (install xclip or wl-clipboard)');
     }
 
-    // Create a new temp file for this operation
-    this.currentTempFile = await this.tempFileManager.createSecureTempFile('.png');
-
     try {
-      const hasImage = await this.hasImage();
-      const hasText = await this.hasText();
+      const types = await this.listClipboardTypes();
+      const hasText = LinuxClipboardProvider.hasTextType(types);
+      const imageType = LinuxClipboardProvider.hasImageType(types);
 
-      if (!hasImage) {
+      if (imageType === null) {
         return {
           hasImage: false,
           hasText,
@@ -142,9 +165,9 @@ export class LinuxClipboardProvider extends BaseClipboardProvider {
         };
       }
 
-      const buffer = await this.saveClipboardImage();
+      const buffer = await this.readClipboardImage(imageType);
 
-      if (!buffer) {
+      if (!buffer || buffer.length === 0) {
         return {
           hasImage: false,
           hasText,
@@ -152,97 +175,49 @@ export class LinuxClipboardProvider extends BaseClipboardProvider {
           format: null,
         };
       }
-
-      const format = this.detectImageFormat(buffer);
 
       return {
         hasImage: true,
         hasText,
         imageBuffer: buffer,
-        format,
+        format: this.detectImageFormat(buffer),
       };
     } catch (error) {
-      await this.cleanup();
       throw new ClipboardError(
         `Failed to read clipboard: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
 
-  private async hasText(): Promise<boolean> {
-    if (!this.availableTool) {
-      return false;
-    }
-
-    try {
-      if (this.availableTool === 'wl-paste') {
-        const { stdout } = await execAsync('wl-paste --list-types 2>/dev/null || true', {
-          timeout: TIMEOUTS.CLIPBOARD_READ,
-        });
-        return stdout.includes('text/plain') || stdout.includes('UTF8_STRING');
-      } else {
-        const { stdout } = await execAsync(
-          'xclip -selection clipboard -t TARGETS -o 2>/dev/null || true',
-          { timeout: TIMEOUTS.CLIPBOARD_READ }
-        );
-        return stdout.includes('text/plain') || stdout.includes('UTF8_STRING');
-      }
-    } catch {
-      return false;
-    }
-  }
-
-  private async saveClipboardImage(): Promise<Buffer | null> {
-    if (this.currentTempFile === null || this.currentTempFile === '' || this.availableTool === null) {
+  /**
+   * Read the clipboard image of the given MIME type directly from the
+   * tool's stdout. execFile with a buffer encoding avoids both the shell
+   * (no escaping concerns) and the temp-file round-trip.
+   */
+  private async readClipboardImage(mimeType: string): Promise<Buffer | null> {
+    if (this.availableTool === null) {
       return null;
     }
 
+    const [file, args] =
+      this.availableTool === 'wl-paste'
+        ? (['wl-paste', ['--type', mimeType]] as const)
+        : (['xclip', ['-selection', 'clipboard', '-t', mimeType, '-o']] as const);
+
     try {
-      if (this.availableTool === 'wl-paste') {
-        // Try PNG first, then JPEG
-        try {
-          await execAsync(
-            `wl-paste --type image/png > ${escapeShellArg(this.currentTempFile)}`,
-            { timeout: TIMEOUTS.CLIPBOARD_READ }
-          );
-        } catch {
-          await execAsync(
-            `wl-paste --type image/jpeg > ${escapeShellArg(this.currentTempFile)}`,
-            { timeout: TIMEOUTS.CLIPBOARD_READ }
-          );
-        }
-      } else {
-        // xclip - try PNG first, then JPEG
-        try {
-          await execAsync(
-            `xclip -selection clipboard -t image/png -o > ${escapeShellArg(this.currentTempFile)}`,
-            { timeout: TIMEOUTS.CLIPBOARD_READ }
-          );
-        } catch {
-          await execAsync(
-            `xclip -selection clipboard -t image/jpeg -o > ${escapeShellArg(this.currentTempFile)}`,
-            { timeout: TIMEOUTS.CLIPBOARD_READ }
-          );
-        }
-      }
-
-      // Verify file was created and has content
-      const stats = await fs.stat(this.currentTempFile);
-      if (stats.size === 0) {
-        return null;
-      }
-
-      return await fs.readFile(this.currentTempFile);
+      const { stdout } = await execFileAsync(file, [...args], {
+        timeout: TIMEOUTS.CLIPBOARD_READ,
+        encoding: 'buffer',
+        maxBuffer: MAX_CLIPBOARD_BYTES,
+      });
+      return stdout;
     } catch {
       return null;
     }
   }
 
   async cleanup(): Promise<void> {
-    if (this.currentTempFile !== null && this.currentTempFile !== '') {
-      await this.tempFileManager.cleanup(this.currentTempFile);
-      this.currentTempFile = null;
-    }
+    // Clipboard data is read from stdout — no temp files to clean up
   }
 
   /**

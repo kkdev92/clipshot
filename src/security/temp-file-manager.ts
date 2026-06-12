@@ -19,6 +19,7 @@ export class TempFileManager {
   private readonly tempDir: string;
   private readonly activeFiles: Set<string> = new Set();
   private isDisposed: boolean = false;
+  private isInitialized: boolean = false;
 
   constructor() {
     const platform = getPlatform();
@@ -40,9 +41,16 @@ export class TempFileManager {
 
   /**
    * Initialize the temp directory with proper permissions
+   *
+   * Skipped once the directory has been created; createSecureTempFile
+   * re-initializes if the directory disappears mid-session.
    */
   public async initialize(): Promise<void> {
+    if (this.isInitialized) {
+      return;
+    }
     await fs.mkdir(this.tempDir, { recursive: true, mode: 0o700 });
+    this.isInitialized = true;
   }
 
   /**
@@ -84,6 +92,12 @@ export class TempFileManager {
       } catch (error) {
         // EEXIST means file already exists (extremely unlikely with 16 random bytes)
         if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+          continue;
+        }
+        // Temp dir was removed after initialization — recreate and retry
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          this.isInitialized = false;
+          await this.initialize();
           continue;
         }
         throw new FileOperationError(

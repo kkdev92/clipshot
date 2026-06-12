@@ -76,12 +76,10 @@ export class FileWriter {
       // Rename temp to final (atomic operation on most filesystems)
       await fs.rename(tempPath, filePath);
 
-      // Get file stats
-      const stats = await fs.stat(filePath);
-
       return {
         absolutePath: filePath,
-        fileSize: stats.size,
+        // The file was just written from this buffer — no stat needed
+        fileSize: data.length,
       };
     } catch (error) {
       // Clean up temp file if it exists
