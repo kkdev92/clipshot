@@ -1,19 +1,23 @@
 /**
  * macOS clipboard provider
- * Uses osascript and NSPasteboard for clipboard access
+ * Uses pngpaste (when installed) or osascript/NSPasteboard for clipboard access
  */
 
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs/promises';
 import type { ClipboardData } from '../../core/types';
 import { ClipboardError } from '../../core/errors';
-import { TIMEOUTS } from '../../core/constants';
+import { TIMEOUTS, LIMITS } from '../../core/constants';
 import { BaseClipboardProvider } from '../clipboard-provider';
 import { getTempFileManager } from '../../security/temp-file-manager';
 import { escapeShellArg } from '../../security/sanitizer';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+// Upper bound for image data read from the clipboard via stdout
+const MAX_CLIPBOARD_BYTES = LIMITS.MAX_FILE_SIZE_MB * 1024 * 1024;
 
 // Cache pngpaste availability to avoid repeated checks
 let pngpasteAvailable: boolean | null = null;
@@ -27,7 +31,6 @@ use scripting additions
 
 set hasImage to false
 set hasText to false
-set savedPath to ""
 
 try
     set pb to current application's NSPasteboard's generalPasteboard()
@@ -56,7 +59,67 @@ return (hasImage as text) & "," & (hasText as text)
 `;
 
 /**
- * macOS clipboard provider using osascript
+ * AppleScript that checks the clipboard AND saves any image in one
+ * invocation. osascript startup (with AppKit loading) costs hundreds of
+ * milliseconds, so combining the old separate check + save scripts halves
+ * the per-paste cost.
+ *
+ * Raw PNG/JPEG clipboard bytes are written as-is — no NSImage decode and
+ * PNG re-encode (Sharp normalizes the format later). TIFF (the only type
+ * some apps provide) is converted to PNG since downstream fallback paths
+ * don't read TIFF.
+ *
+ * Output: "saved,<hasText>" | "none,<hasText>"
+ * The temp path is passed via environment variable to prevent injection.
+ */
+const GET_CLIPBOARD_IMAGE_SCRIPT = `
+use framework "AppKit"
+use framework "Foundation"
+use scripting additions
+
+set tempPath to (system attribute "CLIP_TEMP_PATH")
+set pb to current application's NSPasteboard's generalPasteboard()
+
+set hasText to false
+try
+    set textTypes to {"public.utf8-plain-text", "public.plain-text"}
+    repeat with textType in textTypes
+        if (pb's canReadItemWithDataConformingToTypes:{textType}) then
+            set hasText to true
+            exit repeat
+        end if
+    end repeat
+end try
+
+try
+    -- Write raw bytes for natively encoded formats (no re-encode)
+    repeat with imageType in {"public.png", "public.jpeg"}
+        set imgData to pb's dataForType:imageType
+        if imgData is not missing value then
+            imgData's writeToFile:tempPath atomically:true
+            return "saved," & hasText
+        end if
+    end repeat
+
+    -- TIFF only: convert to PNG via NSBitmapImageRep
+    set tiffData to pb's dataForType:"public.tiff"
+    if tiffData is not missing value then
+        set bitmap to current application's NSBitmapImageRep's imageRepWithData:tiffData
+        if bitmap is not missing value then
+            set pngData to bitmap's representationUsingType:(current application's NSPNGFileType) properties:(missing value)
+            if pngData is not missing value then
+                pngData's writeToFile:tempPath atomically:true
+                return "saved," & hasText
+            end if
+        end if
+    end if
+end try
+
+return "none," & hasText
+`;
+
+/**
+ * macOS clipboard provider using pngpaste/osascript
  */
 export class MacOSClipboardProvider extends BaseClipboardProvider {
   private readonly tempFileManager = getTempFileManager();
@@ -92,21 +155,38 @@ export class MacOSClipboardProvider extends BaseClipboardProvider {
     // Clean up previous temp file if any
     await this.cleanup();
 
-    // Create a new temp file for this operation
-    this.currentTempFile = await this.tempFileManager.createSecureTempFile('.png');
-
     try {
-      // First check what's in clipboard
-      const { stdout: checkResult } = await execAsync(
-        `osascript -e ${escapeShellArg(CHECK_CLIPBOARD_SCRIPT)}`,
-        { timeout: TIMEOUTS.CLIPBOARD_READ }
+      // Fast path: pngpaste streams the image to stdout in a single small
+      // process — no AppKit startup, no temp file.
+      const fastBuffer = await this.readViaPngpaste();
+      if (fastBuffer !== null) {
+        return {
+          hasImage: true,
+          // pngpaste only reports image data; text presence is not needed
+          // by the paste flow, so don't pay another spawn for it
+          hasText: false,
+          imageBuffer: fastBuffer,
+          format: this.detectImageFormat(fastBuffer),
+        };
+      }
+
+      // Single osascript invocation checks the clipboard and saves the image
+      this.currentTempFile = await this.tempFileManager.createSecureTempFile('.png');
+      const { stdout } = await execAsync(
+        `osascript -e ${escapeShellArg(GET_CLIPBOARD_IMAGE_SCRIPT)}`,
+        {
+          timeout: TIMEOUTS.CLIPBOARD_READ,
+          env: {
+            ...process.env,
+            CLIP_TEMP_PATH: this.currentTempFile,
+          },
+        }
       );
 
-      const [hasImageStr, hasTextStr] = checkResult.trim().split(',');
-      const hasImage = hasImageStr === 'true';
+      const [saveResult, hasTextStr] = stdout.trim().split(',');
       const hasText = hasTextStr === 'true';
 
-      if (!hasImage) {
+      if (saveResult !== 'saved') {
         return {
           hasImage: false,
           hasText,
@@ -115,10 +195,8 @@ export class MacOSClipboardProvider extends BaseClipboardProvider {
         };
       }
 
-      // Save the image using pngpaste or screencapture
-      const buffer = await this.saveClipboardImage();
-
-      if (!buffer) {
+      const buffer = await fs.readFile(this.currentTempFile);
+      if (buffer.length === 0) {
         return {
           hasImage: false,
           hasText,
@@ -126,14 +204,12 @@ export class MacOSClipboardProvider extends BaseClipboardProvider {
           format: null,
         };
       }
-
-      const format = this.detectImageFormat(buffer);
 
       return {
         hasImage: true,
         hasText,
         imageBuffer: buffer,
-        format,
+        format: this.detectImageFormat(buffer),
       };
     } catch (error) {
       await this.cleanup();
@@ -143,11 +219,13 @@ export class MacOSClipboardProvider extends BaseClipboardProvider {
     }
   }
 
-  private async saveClipboardImage(): Promise<Buffer | null> {
-    if (this.currentTempFile === null || this.currentTempFile === '') {
-      return null;
-    }
-
+  /**
+   * Read the clipboard image via pngpaste's stdout, if pngpaste is installed.
+   *
+   * @returns PNG buffer, or null when pngpaste is unavailable, the clipboard
+   *          has no image, or the read fails (callers fall back to osascript)
+   */
+  private async readViaPngpaste(): Promise<Buffer | null> {
     // Check pngpaste availability (cache result)
     if (pngpasteAvailable === null) {
       try {
@@ -158,66 +236,23 @@ export class MacOSClipboardProvider extends BaseClipboardProvider {
       }
     }
 
-    // Try pngpaste first (if installed via Homebrew)
-    if (pngpasteAvailable) {
-      try {
-        await execAsync(`pngpaste ${escapeShellArg(this.currentTempFile)}`, {
-          timeout: TIMEOUTS.CLIPBOARD_READ,
-        });
-        return await fs.readFile(this.currentTempFile);
-      } catch {
-        // pngpaste failed (e.g., no image in clipboard), fall through to osascript
-      }
+    if (!pngpasteAvailable) {
+      return null;
     }
-
-    // Use osascript with NSPasteboard
-    // Path is passed via environment variable to prevent injection attacks
-    const saveScript = `
-use framework "AppKit"
-use framework "Foundation"
-use scripting additions
-
-set tempPath to (system attribute "CLIP_TEMP_PATH")
-set pb to current application's NSPasteboard's generalPasteboard()
-set imageTypes to {"public.png", "public.tiff", "public.jpeg"}
-
-repeat with imageType in imageTypes
-    set imgData to pb's dataForType:imageType
-    if imgData is not missing value then
-        set nsImage to current application's NSImage's alloc()'s initWithData:imgData
-        if nsImage is not missing value then
-            set tiffData to nsImage's TIFFRepresentation()
-            set bitmap to current application's NSBitmapImageRep's imageRepWithData:tiffData
-            set pngData to bitmap's representationUsingType:(current application's NSPNGFileType) properties:(missing value)
-            pngData's writeToFile:tempPath atomically:true
-            return "success"
-        end if
-    end if
-end repeat
-
-return "failed"
-`;
 
     try {
-      const { stdout } = await execAsync(
-        `osascript -e ${escapeShellArg(saveScript)}`,
-        {
-          timeout: TIMEOUTS.CLIPBOARD_READ,
-          env: {
-            ...process.env,
-            CLIP_TEMP_PATH: this.currentTempFile,
-          },
-        }
-      );
-
-      if (stdout.trim() === 'success') {
-        return await fs.readFile(this.currentTempFile);
-      }
+      // "-" writes the PNG to stdout; exits non-zero when there is no image
+      const { stdout } = await execFileAsync('pngpaste', ['-'], {
+        timeout: TIMEOUTS.CLIPBOARD_READ,
+        encoding: 'buffer',
+        maxBuffer: MAX_CLIPBOARD_BYTES,
+      });
+      return stdout.length > 0 ? stdout : null;
     } catch {
-      // Failed to save
+      // No image, old pngpaste without stdout support, or other failure —
+      // the osascript path handles it
+      return null;
     }
-
-    return null;
   }
 
   async cleanup(): Promise<void> {

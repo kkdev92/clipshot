@@ -25,6 +25,9 @@ let cachedPowerShellPath: string | null = null;
  * Optimizations applied:
  * - Single Add-Type call loads both assemblies at once
  * - Early exit when no image is present (avoids unnecessary processing)
+ * - Raw "PNG" clipboard data (set by browsers, Snipping Tool, etc.) is written
+ *   as-is, skipping the slow GDI+ decode + PNG re-encode and preserving the
+ *   alpha channel that GetImage() drops
  */
 const CLIPBOARD_SCRIPT = `
 # Load required .NET assemblies in a single call for faster startup
@@ -39,14 +42,30 @@ if (-not $clipboard::ContainsImage()) {
     return
 }
 
+$tempPath = $env:CLIP_TEMP_PATH
+
+# Fast path: many apps put an encoded PNG directly on the clipboard.
+# Writing those bytes as-is avoids a GDI+ re-encode entirely.
+$dataObject = $clipboard::GetDataObject()
+if ($dataObject -ne $null -and $dataObject.GetDataPresent("PNG")) {
+    $pngStream = $dataObject.GetData("PNG")
+    if ($pngStream -is [System.IO.Stream] -and $pngStream.Length -gt 8) {
+        $pngStream.Position = 0
+        $fileStream = [System.IO.File]::Create($tempPath)
+        $pngStream.CopyTo($fileStream)
+        $fileStream.Dispose()
+        "::RESULT::True,$hasText,$tempPath"
+        return
+    }
+}
+
+# Fallback: decode via GDI+ and encode as PNG
 $image = $clipboard::GetImage()
 if ($image -eq $null) {
     "::RESULT::False,$hasText,"
     return
 }
 
-# Save image as PNG
-$tempPath = $env:CLIP_TEMP_PATH
 $image.Save($tempPath, [System.Drawing.Imaging.ImageFormat]::Png)
 $image.Dispose()
 
@@ -69,8 +88,10 @@ export class WindowsClipboardProvider extends BaseClipboardProvider {
 
   async isAvailable(): Promise<boolean> {
     try {
-      // Check if PowerShell is available
-      await execAsync('powershell.exe -NoProfile -Command "echo ok"', { timeout: 5000 });
+      // Detecting the PowerShell executable doubles as the availability
+      // check, so a paste pays for at most one probe (cached afterwards)
+      // instead of an extra PowerShell startup per call.
+      await this.getPowerShellPath();
       return true;
     } catch {
       return false;
@@ -246,7 +267,9 @@ export class WindowsClipboardProvider extends BaseClipboardProvider {
       await execAsync('pwsh -NoProfile -Command "echo ok"', { timeout: 5000 });
       cachedPowerShellPath = 'pwsh';
     } catch {
-      // Fall back to Windows PowerShell
+      // Fall back to Windows PowerShell, but verify it actually runs so
+      // isAvailable() reports honestly (e.g. on non-Windows systems)
+      await execAsync('powershell.exe -NoProfile -Command "echo ok"', { timeout: 5000 });
       cachedPowerShellPath = 'powershell.exe';
     }
 

@@ -36,6 +36,7 @@ export class ClipboardManager {
   private readonly provider: IClipboardProvider;
   private readonly platform: Platform;
   private readonly logger?: Logger;
+  private availabilityConfirmed = false;
 
   constructor(provider?: IClipboardProvider, logger?: Logger) {
     this.platform = getPlatform();
@@ -49,13 +50,24 @@ export class ClipboardManager {
    * Verifies that the platform-specific clipboard tool (PowerShell, osascript,
    * xclip, or wl-paste) is installed and accessible.
    *
+   * A confirmed-available result is cached: the tools don't disappear
+   * mid-session, and re-probing costs a process spawn on every paste
+   * (a full PowerShell startup on Windows). Negative results are NOT
+   * cached so a missing tool can be installed without reloading.
+   *
    * @returns True if clipboard access is available, false otherwise
    */
   async isAvailable(): Promise<boolean> {
+    if (this.availabilityConfirmed) {
+      return true;
+    }
     this.logger?.debug('Checking clipboard availability', { platform: this.platform });
     try {
       const available = await this.provider.isAvailable();
       this.logger?.debug('Clipboard availability result', { available });
+      if (available) {
+        this.availabilityConfirmed = true;
+      }
       return available;
     } catch (error) {
       this.logger?.warn('Clipboard availability check failed', error);

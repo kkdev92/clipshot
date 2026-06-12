@@ -133,9 +133,19 @@ export class PasteHandler {
         throw new NoWorkspaceError();
       }
 
+      // Kick off the Sharp dynamic import now so the native module loads
+      // while the clipboard subprocess runs (isSharpAvailable never rejects)
+      const imageProcessor = new ImageProcessor(workspaceRoot, logger);
+      const sharpAvailablePromise = imageProcessor.isSharpAvailable();
+
       // Get image data from clipboard (includes hasImage check)
       logger.debug('Reading clipboard image');
+      const clipboardStart = Date.now();
       const clipboardData = await clipboardManager.getImageData();
+      logger.debug('Clipboard read finished', {
+        durationMs: Date.now() - clipboardStart,
+        size: clipboardData.imageBuffer?.length ?? 0,
+      });
 
       if (!clipboardData.hasImage || !clipboardData.imageBuffer) {
         throw new NoImageError();
@@ -143,10 +153,9 @@ export class PasteHandler {
 
       // Process and save the image
       logger.debug('Processing image', { size: clipboardData.imageBuffer.length });
-      const imageProcessor = new ImageProcessor(workspaceRoot, logger);
 
-      // Check Sharp availability
-      const sharpAvailable = await imageProcessor.isSharpAvailable();
+      // Check Sharp availability (already loading since before the clipboard read)
+      const sharpAvailable = await sharpAvailablePromise;
       if (!sharpAvailable) {
         const loadError = getSharpLoadError();
         logger.warn('Sharp is not available - resize will be skipped');
@@ -165,6 +174,7 @@ export class PasteHandler {
         sharpAvailable,
       });
 
+      const processStart = Date.now();
       const processedImage = await imageProcessor.processAndSave(
         clipboardData.imageBuffer,
         config.saveDirectory,
@@ -180,7 +190,10 @@ export class PasteHandler {
         }
       );
 
-      logger.info('Image saved', { path: processedImage.relativePath });
+      logger.info('Image saved', {
+        path: processedImage.relativePath,
+        processingMs: Date.now() - processStart,
+      });
 
       // Format the insert text
       const insertText = formatInsertText(

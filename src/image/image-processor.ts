@@ -39,7 +39,9 @@ type SharpInstance = {
 };
 
 type SharpModule = {
-  default: (input: Buffer) => SharpInstance;
+  default: ((input: Buffer) => SharpInstance) & {
+    cache?: (enabled: boolean) => unknown;
+  };
 };
 
 let sharpModule: SharpModule | null = null;
@@ -59,6 +61,16 @@ async function loadSharp(): Promise<SharpModule | null> {
   try {
     // Dynamic import to handle cases where Sharp is not available
     sharpModule = (await import('sharp')) as SharpModule;
+
+    // Each paste runs a one-shot pipeline that never hits libvips'
+    // operation cache; disable it so the long-lived extension host
+    // doesn't hold cached operations (up to ~50MB) between pastes.
+    try {
+      sharpModule.default.cache?.(false);
+    } catch {
+      // Cache configuration is best-effort
+    }
+
     return sharpModule;
   } catch (error) {
     // Sharp not available - save error for later retrieval
