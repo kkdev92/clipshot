@@ -97,25 +97,27 @@ try
         set imgData to pb's dataForType:imageType
         if imgData is not missing value then
             imgData's writeToFile:tempPath atomically:true
-            return "saved," & hasText
+            return "saved," & (hasText as text)
         end if
     end repeat
 
     -- TIFF only: convert to PNG via NSBitmapImageRep
+    -- ("properties" is an AppleScript reserved word, so the selector part
+    -- must be pipe-escaped)
     set tiffData to pb's dataForType:"public.tiff"
     if tiffData is not missing value then
         set bitmap to current application's NSBitmapImageRep's imageRepWithData:tiffData
         if bitmap is not missing value then
-            set pngData to bitmap's representationUsingType:(current application's NSPNGFileType) properties:(missing value)
+            set pngData to bitmap's representationUsingType:(current application's NSPNGFileType) |properties|:(missing value)
             if pngData is not missing value then
                 pngData's writeToFile:tempPath atomically:true
-                return "saved," & hasText
+                return "saved," & (hasText as text)
             end if
         end if
     end if
 end try
 
-return "none," & hasText
+return "none," & (hasText as text)
 `;
 
 /**

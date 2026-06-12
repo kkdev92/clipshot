@@ -87,6 +87,11 @@ export class WindowsClipboardProvider extends BaseClipboardProvider {
   }
 
   async isAvailable(): Promise<boolean> {
+    // pwsh also exists on Linux/macOS, but the WinForms clipboard does not
+    if (process.platform !== 'win32') {
+      return false;
+    }
+
     try {
       // Detecting the PowerShell executable doubles as the availability
       // check, so a paste pays for at most one probe (cached afterwards)
