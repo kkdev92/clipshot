@@ -39,8 +39,11 @@ export type ResizePreset = 'ai-optimized';
 
 /**
  * Re-export Logger and LogLevel from vscode-ext-kit
+ * (imported rather than re-exported directly so this module can also
+ * reference LogLevel in its own declarations below)
  */
-export type { Logger, LogLevel } from '@kkdev92/vscode-ext-kit';
+import type { Logger, LogLevel } from '@kkdev92/vscode-ext-kit';
+export type { Logger, LogLevel };
 
 /**
  * Clipboard data returned from clipboard providers
