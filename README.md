@@ -24,6 +24,7 @@ Great for markdown docs, notes, and AI chats.
 - [Platform Requirements](#platform-requirements)
 - [Security](#security)
 - [Troubleshooting](#troubleshooting)
+- [Changelog](#changelog)
 - [Contributing](#contributing)
 - [Support & Maintenance Policy](#support--maintenance-policy)
 - [License](#license)
@@ -230,6 +231,12 @@ For security concerns, please see [SECURITY.md](SECURITY.md).
 - **Need more detail in the logs**: Set `clipshot.logLevel` to `debug` or `trace`
   and open **View → Output → clipshot**. This setting alone controls what is
   logged — no separate _Developer: Set Log Level_ step is required.
+
+---
+
+## Changelog
+
+Release notes are in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
