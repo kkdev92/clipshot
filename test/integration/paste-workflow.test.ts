@@ -72,6 +72,9 @@ describe('Paste Workflow Integration', () => {
     jpegQuality: 80,
     webpQuality: 80,
     maxFileSizeMB: 10,
+    resizeMode: 'off',
+    maxWidth: null,
+    maxHeight: null,
   };
 
   beforeEach(async () => {

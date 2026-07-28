@@ -5,70 +5,25 @@
 
 import * as vscode from 'vscode';
 import {
-  createLogger,
-  registerCommands,
-  getSetting,
-  onConfigChange,
+  createExtensionKit,
   showInfo,
   showError,
   withProgress,
 } from '@kkdev92/vscode-ext-kit';
-import type { LogLevel } from '@kkdev92/vscode-ext-kit';
-import type { ExtensionConfig, ImageFormat, InsertFormat, AltSource, NotificationLevel, ResizeMode, ResizePreset } from './core/types';
-import { EXTENSION_ID, COMMANDS, CONTEXT_KEYS, DEFAULTS, CONFIG_PREFIX } from './core/constants';
-import { validateConfiguration, sanitizeConfiguration } from './config/validators';
+import type { ExtensionKit } from '@kkdev92/vscode-ext-kit';
+import type { ExtensionConfig, Logger, NotificationLevel } from './core/types';
+import { EXTENSION_ID, COMMANDS, CONTEXT_KEYS, CONFIG_PREFIX } from './core/constants';
+import { validateConfiguration } from './config/validators';
+import { config, loadConfiguration } from './config/schema';
 import { getPasteHandler } from './keyboard/paste-handler';
 import { disposeGlobalClipboardManager } from './clipboard/clipboard-manager';
 import { disposeGlobalTempFileManager } from './security/temp-file-manager';
 
+/** Command IDs this extension registers */
+type ClipShotCommandId = typeof COMMANDS.PASTE_IMAGE;
+
 // Logger instance (initialized in activate)
-let logger: ReturnType<typeof createLogger>;
-
-/**
- * Load extension configuration from VS Code settings
- *
- * Reads all clipshot.* settings and applies sanitization
- * to ensure values are within valid ranges.
- *
- * @returns Complete extension configuration object
- */
-function loadConfiguration(): ExtensionConfig {
-  const config: ExtensionConfig = {
-    enabled: getSetting<boolean>(CONFIG_PREFIX, 'enabled', DEFAULTS.ENABLED),
-    logLevel: getSetting<LogLevel>(CONFIG_PREFIX, 'logLevel', DEFAULTS.LOG_LEVEL),
-    saveDirectory: getSetting<string>(CONFIG_PREFIX, 'saveDirectory', DEFAULTS.SAVE_DIRECTORY),
-    fileName: {
-      pattern: getSetting<string>(CONFIG_PREFIX, 'fileName.pattern', DEFAULTS.FILE_NAME_PATTERN),
-      sequenceDigits: getSetting<number>(CONFIG_PREFIX, 'fileName.sequenceDigits', DEFAULTS.SEQUENCE_DIGITS),
-    },
-    output: {
-      format: getSetting<ImageFormat>(CONFIG_PREFIX, 'output.format', DEFAULTS.OUTPUT_FORMAT),
-      jpegQuality: getSetting<number>(CONFIG_PREFIX, 'output.jpegQuality', DEFAULTS.JPEG_QUALITY),
-      webpQuality: getSetting<number>(CONFIG_PREFIX, 'output.webpQuality', DEFAULTS.WEBP_QUALITY),
-    },
-    resize: {
-      mode: getSetting<ResizeMode>(CONFIG_PREFIX, 'resize.mode', DEFAULTS.RESIZE_MODE),
-      maxWidth: getSetting<number | null>(CONFIG_PREFIX, 'resize.maxWidth', DEFAULTS.RESIZE_MAX_WIDTH),
-      maxHeight: getSetting<number | null>(CONFIG_PREFIX, 'resize.maxHeight', DEFAULTS.RESIZE_MAX_HEIGHT),
-      preset: getSetting<ResizePreset | null>(CONFIG_PREFIX, 'resize.preset', DEFAULTS.RESIZE_PRESET),
-    },
-    insert: {
-      format: getSetting<InsertFormat>(CONFIG_PREFIX, 'insert.format', DEFAULTS.INSERT_FORMAT),
-      altSource: getSetting<AltSource>(CONFIG_PREFIX, 'insert.altSource', DEFAULTS.ALT_SOURCE),
-      altLiteral: getSetting<string>(CONFIG_PREFIX, 'insert.altLiteral', DEFAULTS.ALT_LITERAL),
-    },
-    limits: {
-      maxFileSizeMB: getSetting<number>(CONFIG_PREFIX, 'limits.maxFileSizeMB', DEFAULTS.MAX_FILE_SIZE_MB),
-    },
-    notifications: {
-      level: getSetting<NotificationLevel>(CONFIG_PREFIX, 'notifications.level', DEFAULTS.NOTIFICATION_LEVEL),
-    },
-  };
-
-  // Sanitize configuration
-  const sanitized = sanitizeConfiguration(config);
-  return { ...config, ...sanitized } as ExtensionConfig;
-}
+let logger: Logger | undefined;
 
 /**
  * Validate configuration and log any issues as warnings
@@ -83,7 +38,7 @@ function validateAndLogConfig(config: ExtensionConfig): void {
   const result = validateConfiguration(config);
   if (!result.valid && logger !== undefined) {
     for (const error of result.errors) {
-      logger.warn(`Configuration warning: ${error}`);
+      logger.warn('Configuration warning', { issue: error });
     }
   }
 }
@@ -125,86 +80,102 @@ function updateContextKeys(config: ExtensionConfig): void {
 }
 
 /**
+ * Handle a completed paste operation by notifying the user
+ *
+ * @param kit - The extension kit (for logging)
+ * @param currentConfig - Configuration in effect for this paste
+ */
+async function runPasteCommand(
+  kit: ExtensionKit<ClipShotCommandId>,
+  currentConfig: ExtensionConfig
+): Promise<void> {
+  const pasteHandler = getPasteHandler();
+
+  // Use withProgress to show progress indicator
+  const result = await withProgress(
+    'ClipShot',
+    async (progress) => {
+      progress.report({ message: 'Reading clipboard...' });
+      return pasteHandler.handlePaste(currentConfig, kit.logger);
+    },
+    { cancellable: false }
+  );
+
+  if (result.success) {
+    if (result.processedImage) {
+      const img = result.processedImage;
+      const sizeMB = (img.fileSize / (1024 * 1024)).toFixed(2);
+      const dims = img.dimensions
+        ? `, ${img.dimensions.width}x${img.dimensions.height}`
+        : '';
+
+      if (result.copiedToClipboard === true) {
+        // Path copied to clipboard - user needs to paste manually
+        notifySuccess(
+          `Image saved! Path copied - press Ctrl+V to paste: ${img.relativePath}`,
+          currentConfig.notifications.level
+        );
+      } else {
+        // Path inserted directly
+        notifySuccess(
+          `Image saved: ${img.relativePath} (${sizeMB}MB${dims})`,
+          currentConfig.notifications.level
+        );
+      }
+    }
+  } else if (result.error !== undefined && result.error !== '') {
+    notifyError(
+      `Paste failed: ${result.error}`,
+      currentConfig.notifications.level
+    );
+  }
+}
+
+/**
  * Extension activation
  */
 export function activate(context: vscode.ExtensionContext): void {
   // Load initial configuration
-  let config = loadConfiguration();
+  let currentConfig = loadConfiguration();
 
-  // Create logger with config section for automatic log level sync
-  logger = createLogger(EXTENSION_ID, {
-    level: config.logLevel,
-    configSection: `${CONFIG_PREFIX}.logLevel`,
+  // One call wires the logger, a disposable scope and command registration.
+  // channelMode 'plain' keeps clipshot.logLevel the single source of truth:
+  // a LogOutputChannel would additionally filter by VS Code's own log level,
+  // which cannot be set programmatically.
+  const kit = createExtensionKit<ClipShotCommandId>(context, EXTENSION_ID, {
+    logger: {
+      level: currentConfig.logLevel,
+      channelMode: 'plain',
+      configSection: `${CONFIG_PREFIX}.logLevel`,
+    },
   });
-  context.subscriptions.push(logger);
+  logger = kit.logger;
 
   logger.info('Activating extension');
 
   // Validate configuration
-  validateAndLogConfig(config);
+  validateAndLogConfig(currentConfig);
 
   // Update context keys
-  updateContextKeys(config);
+  updateContextKeys(currentConfig);
 
   // Watch for configuration changes
-  context.subscriptions.push(
-    onConfigChange(CONFIG_PREFIX, () => {
-      config = loadConfiguration();
-      validateAndLogConfig(config);
-      updateContextKeys(config);
+  kit.disposables.add(
+    config.onDidChangeAny(() => {
+      currentConfig = loadConfiguration();
+      validateAndLogConfig(currentConfig);
+      updateContextKeys(currentConfig);
       // Note: logger.setLevel() is not needed here because
       // configSection option enables automatic log level sync
-      logger.info('Configuration updated');
+      logger?.info('Configuration updated');
     })
   );
 
-  // Get paste handler
-  const pasteHandler = getPasteHandler();
-
   // Register commands
-  registerCommands(context, logger, {
+  kit.registerCommands({
     [COMMANDS.PASTE_IMAGE]: async () => {
-      const currentConfig = loadConfiguration();
-      logger.debug('Paste command triggered');
-
-      // Use withProgress to show progress indicator
-      const result = await withProgress(
-        'ClipShot',
-        async (progress) => {
-          progress.report({ message: 'Reading clipboard...' });
-          return pasteHandler.handlePaste(currentConfig, logger);
-        },
-        { cancellable: false }
-      );
-
-      if (result.success) {
-        if (result.processedImage) {
-          const img = result.processedImage;
-          const sizeMB = (img.fileSize / (1024 * 1024)).toFixed(2);
-          const dims = img.dimensions
-            ? `, ${img.dimensions.width}x${img.dimensions.height}`
-            : '';
-
-          if (result.copiedToClipboard === true) {
-            // Path copied to clipboard - user needs to paste manually
-            notifySuccess(
-              `Image saved! Path copied - press Ctrl+V to paste: ${img.relativePath}`,
-              currentConfig.notifications.level
-            );
-          } else {
-            // Path inserted directly
-            notifySuccess(
-              `Image saved: ${img.relativePath} (${sizeMB}MB${dims})`,
-              currentConfig.notifications.level
-            );
-          }
-        }
-      } else if (result.error !== undefined && result.error !== '') {
-        notifyError(
-          `Paste failed: ${result.error}`,
-          currentConfig.notifications.level
-        );
-      }
+      kit.logger.debug('Paste command triggered');
+      await runPasteCommand(kit, currentConfig);
     },
   });
 
@@ -215,11 +186,12 @@ export function activate(context: vscode.ExtensionContext): void {
  * Extension deactivation
  */
 export async function deactivate(): Promise<void> {
-  logger.info('Deactivating extension');
+  logger?.info('Deactivating extension');
 
   // Clean up resources
   await disposeGlobalClipboardManager();
   await disposeGlobalTempFileManager();
 
-  logger.info('Extension deactivated');
+  logger?.info('Extension deactivated');
+  logger = undefined;
 }

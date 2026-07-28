@@ -1,11 +1,24 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  // Vite warns once per module that @kkdev92/vscode-ext-kit's published
+  // .js.map files reference sources the package does not ship. Test failures
+  // are reported by Vitest itself, so muting Vite's warnings keeps the output
+  // readable without hiding results.
+  logLevel: 'error',
   test: {
     globals: true,
     environment: 'node',
     include: ['test/**/*.test.ts'],
     exclude: ['test/e2e/**'],
+    setupFiles: ['./test/setup.ts'],
+    server: {
+      deps: {
+        // The kit imports 'vscode' itself, so it has to go through Vite's
+        // transform for the module mock in test/setup.ts to reach it.
+        inline: ['@kkdev92/vscode-ext-kit'],
+      },
+    },
     testTimeout: 30000,
     hookTimeout: 30000,
     coverage: {
@@ -14,7 +27,6 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: [
         'src/**/*.d.ts',
-        'src/extension.ts',
         'src/**/index.ts',
         'src/core/types.ts',
         // Platform-specific providers depend on external tools (PowerShell, xclip, osascript)

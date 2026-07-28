@@ -10,7 +10,8 @@ import { glob } from 'glob';
 export async function run(): Promise<void> {
   // Create the mocha test
   const mocha = new Mocha({
-    ui: 'bdd',
+    // The e2e specs use suite()/test(), which is Mocha's TDD interface.
+    ui: 'tdd',
     color: true,
     timeout: 60000, // 60 second timeout for E2E tests
   });

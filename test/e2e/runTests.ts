@@ -8,8 +8,10 @@ import { runTests, downloadAndUnzipVSCode } from '@vscode/test-electron';
 
 async function main() {
   try {
-    // The folder containing the Extension Manifest package.json
-    const extensionDevelopmentPath = path.resolve(__dirname, '../../');
+    // The folder containing the Extension Manifest package.json.
+    // This file runs compiled, from test/e2e/out/, so the repo root is
+    // three levels up.
+    const extensionDevelopmentPath = path.resolve(__dirname, '../../../');
 
     // The path to the extension test script
     const extensionTestsPath = path.resolve(__dirname, './suite/index');
@@ -27,7 +29,7 @@ async function main() {
         '--disable-extensions',
         // Use a clean user data dir
         '--user-data-dir',
-        path.resolve(__dirname, '../../.vscode-test/user-data'),
+        path.resolve(extensionDevelopmentPath, '.vscode-test/user-data'),
       ],
     });
   } catch (err) {

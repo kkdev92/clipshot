@@ -121,6 +121,17 @@ export interface ExtensionConfig {
 }
 
 /**
+ * Recursively optional version of T
+ *
+ * The configuration validators accept fragments of ExtensionConfig — a single
+ * nested group such as `{ output: { jpegQuality } }` — so a shallow
+ * `Partial<T>` would still demand every sibling key.
+ */
+export type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends Record<string, unknown> ? DeepPartial<T[K]> : T[K];
+};
+
+/**
  * Validation result
  */
 export interface ValidationResult {

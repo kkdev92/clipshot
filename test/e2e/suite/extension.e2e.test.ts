@@ -121,18 +121,22 @@ suite('ClipShot Configuration E2E Tests', () => {
   test('Should be able to update configuration', async () => {
     const config = vscode.workspace.getConfiguration('clipshot');
 
-    // Get current value
-    const originalValue = config.get<string>('saveDirectory');
+    // Only a value explicitly set at the Global target has to be restored;
+    // otherwise clear the key so the package.json default applies again.
+    const originalValue = config.inspect<string>('saveDirectory')?.globalValue;
 
-    // Update value
-    await config.update('saveDirectory', 'test-images', vscode.ConfigurationTarget.Global);
+    try {
+      await config.update('saveDirectory', 'test-images', vscode.ConfigurationTarget.Global);
 
-    // Verify update
-    const newValue = config.get<string>('saveDirectory');
-    assert.strictEqual(newValue, 'test-images', 'Configuration not updated');
-
-    // Restore original
-    await config.update('saveDirectory', originalValue, vscode.ConfigurationTarget.Global);
+      const newValue = vscode.workspace
+        .getConfiguration('clipshot')
+        .get<string>('saveDirectory');
+      assert.strictEqual(newValue, 'test-images', 'Configuration not updated');
+    } finally {
+      // Restore in a finally block: leaving the override behind would leak
+      // into the other tests and into the next run's user-data directory.
+      await config.update('saveDirectory', originalValue, vscode.ConfigurationTarget.Global);
+    }
   });
 
   test('Should validate output format options', () => {

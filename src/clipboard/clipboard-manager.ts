@@ -3,7 +3,7 @@
  */
 
 import type { ClipboardData, Platform, Logger } from '../core/types';
-import { PlatformNotSupportedError, ClipboardError } from '../core/errors';
+import { PlatformNotSupportedError, ClipboardError, toErrorFields } from '../core/errors';
 import { getPlatform } from '../security/sanitizer';
 import type { IClipboardProvider } from './clipboard-provider';
 import { WindowsClipboardProvider } from './providers/windows-provider';
@@ -70,7 +70,7 @@ export class ClipboardManager {
       }
       return available;
     } catch (error) {
-      this.logger?.warn('Clipboard availability check failed', error);
+      this.logger?.warn('Clipboard availability check failed', toErrorFields(error));
       return false;
     }
   }
@@ -90,7 +90,7 @@ export class ClipboardManager {
       this.logger?.debug('Clipboard hasImage result', { hasImage });
       return hasImage;
     } catch (error) {
-      this.logger?.warn('Clipboard hasImage check failed', error);
+      this.logger?.warn('Clipboard hasImage check failed', toErrorFields(error));
       return false;
     }
   }

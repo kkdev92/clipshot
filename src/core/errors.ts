@@ -137,6 +137,27 @@ export function isClipShotError(error: unknown): error is ClipShotError {
 }
 
 /**
+ * Convert an unknown thrown value into structured logger fields
+ *
+ * vscode-ext-kit's Logger takes structured fields (Record) rather than
+ * printf-style varargs, so caught errors have to be normalized before
+ * they can be attached to a log entry.
+ *
+ * @param error - The caught value
+ * @returns Fields describing the error, ready to pass as the logger's second argument
+ */
+export function toErrorFields(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      error: error.message,
+      errorName: error.name,
+      ...(error.stack !== undefined && { stack: error.stack }),
+    };
+  }
+  return { error: String(error) };
+}
+
+/**
  * Get user-friendly error message from any error
  */
 export function getUserErrorMessage(error: unknown): string {

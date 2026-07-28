@@ -48,6 +48,8 @@ out/
 
 # ===== Testing =====
 coverage/
+# VS Code instance and user data downloaded by @vscode/test-electron
+.vscode-test/
 
 # ===== IDE =====
 .vscode/
