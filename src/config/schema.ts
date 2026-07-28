@@ -13,30 +13,9 @@
  */
 
 import { defineConfigSchema, field, s } from '@kkdev92/vscode-ext-kit';
-import type { StandardSchemaV1 } from '@kkdev92/vscode-ext-kit';
-import type { ExtensionConfig, ResizePreset } from '../core/types';
+import type { ExtensionConfig } from '../core/types';
 import { CONFIG_PREFIX, DEFAULTS } from '../core/constants';
 import { sanitizeConfiguration } from './validators';
-
-/**
- * Accepts a nullable value, delegating non-null values to `inner`.
- *
- * The built-in `s.optional` widens with `undefined`; ClipShot's nullable
- * settings are declared as `null` in package.json instead.
- */
-function nullable<T>(
-  inner: (value: unknown) => value is T
-): StandardSchemaV1<unknown, T | null> {
-  return s.custom<T | null>(
-    (value): value is T | null => value === null || inner(value)
-  );
-}
-
-const isResizePreset = (value: unknown): value is ResizePreset =>
-  value === 'ai-optimized';
-
-const isFiniteNumber = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isFinite(value);
 
 /**
  * Typed accessor for every clipshot.* setting.
@@ -61,9 +40,15 @@ export const config = defineConfigSchema(CONFIG_PREFIX, {
   'output.jpegQuality': field(s.number({ integer: true }), DEFAULTS.JPEG_QUALITY),
   'output.webpQuality': field(s.number({ integer: true }), DEFAULTS.WEBP_QUALITY),
   'resize.mode': field(s.enum('off', 'fit'), DEFAULTS.RESIZE_MODE),
-  'resize.maxWidth': field(nullable(isFiniteNumber), DEFAULTS.RESIZE_MAX_WIDTH),
-  'resize.maxHeight': field(nullable(isFiniteNumber), DEFAULTS.RESIZE_MAX_HEIGHT),
-  'resize.preset': field(nullable(isResizePreset), DEFAULTS.RESIZE_PRESET),
+  'resize.maxWidth': field(
+    s.nullable(s.number({ integer: true })),
+    DEFAULTS.RESIZE_MAX_WIDTH
+  ),
+  'resize.maxHeight': field(
+    s.nullable(s.number({ integer: true })),
+    DEFAULTS.RESIZE_MAX_HEIGHT
+  ),
+  'resize.preset': field(s.nullable(s.enum('ai-optimized')), DEFAULTS.RESIZE_PRESET),
   'insert.format': field(
     s.enum('auto', 'path', 'markdown', 'html'),
     DEFAULTS.INSERT_FORMAT

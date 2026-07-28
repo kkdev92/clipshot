@@ -4,33 +4,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createVSCodeMock, createMockLogger } from '@kkdev92/vscode-ext-kit/testing';
+import { createMockLogger } from '@kkdev92/vscode-ext-kit/testing';
 import type { ExtensionConfig, ProcessedImage, Logger, ClipboardData } from '../../src/core/types';
 
-// Extend the library's vscode mock with the members ClipShot needs but the
-// library itself does not use (clipboard access, workspace folders, and a
-// settable activeTextEditor).
-vi.mock('vscode', () => {
-  const base = createVSCodeMock(vi);
-  return {
-    ...base,
-    window: {
-      ...base.window,
-      activeTextEditor: undefined,
-    },
-    workspace: {
-      ...base.workspace,
-      workspaceFolders: undefined,
-    },
-    env: {
-      ...base.env,
-      clipboard: {
-        writeText: vi.fn().mockResolvedValue(undefined),
-        readText: vi.fn().mockResolvedValue(''),
-      },
-    },
-  };
-});
+// The vscode module is mocked globally in test/setup.ts.
 
 // Mock clipboard manager
 vi.mock('../../src/clipboard/clipboard-manager', () => ({

@@ -1,11 +1,6 @@
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  // Vite warns once per module that @kkdev92/vscode-ext-kit's published
-  // .js.map files reference sources the package does not ship. Test failures
-  // are reported by Vitest itself, so muting Vite's warnings keeps the output
-  // readable without hiding results.
-  logLevel: 'error',
   test: {
     globals: true,
     environment: 'node',

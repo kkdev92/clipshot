@@ -3,10 +3,10 @@
  *
  * Replaces the `vscode` module with the mock suite published by
  * @kkdev92/vscode-ext-kit, so unit tests can import extension code without
- * an extension host. Individual test files may declare their own
- * `vi.mock('vscode', ...)` to extend this with extension-specific members
- * (ClipShot needs `env.clipboard` and `workspace.workspaceFolders`, which
- * are outside the library's mock surface).
+ * an extension host. The mock covers everything ClipShot touches —
+ * `window.activeTextEditor`, `workspace.workspaceFolders` and
+ * `env.clipboard` included — so test files can assign to those directly
+ * instead of composing their own mock.
  */
 
 import { vi } from 'vitest';

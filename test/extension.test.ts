@@ -6,32 +6,9 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { createVSCodeMock, createMockExtensionContext } from '@kkdev92/vscode-ext-kit/testing';
+import { createMockExtensionContext } from '@kkdev92/vscode-ext-kit/testing';
 
-// ClipShot reads workspace folders and the clipboard, which are outside the
-// library's mock surface (see test/keyboard/paste-handler.test.ts).
-vi.mock('vscode', () => {
-  const base = createVSCodeMock(vi);
-  return {
-    ...base,
-    window: {
-      ...base.window,
-      activeTextEditor: undefined,
-    },
-    workspace: {
-      ...base.workspace,
-      workspaceFolders: undefined,
-    },
-    env: {
-      ...base.env,
-      clipboard: {
-        writeText: vi.fn().mockResolvedValue(undefined),
-        readText: vi.fn().mockResolvedValue(''),
-      },
-    },
-  };
-});
-
+// The vscode module is mocked globally in test/setup.ts.
 vi.mock('../src/keyboard/paste-handler', () => ({
   getPasteHandler: vi.fn(),
 }));

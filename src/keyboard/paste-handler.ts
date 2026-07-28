@@ -8,7 +8,6 @@ import {
   NoImageError,
   NoWorkspaceError,
   getUserErrorMessage,
-  toErrorFields,
 } from '../core/errors';
 import { RESIZE_PRESETS } from '../core/constants';
 import { getClipboardManager } from '../clipboard/clipboard-manager';
@@ -161,7 +160,7 @@ export class PasteHandler {
         const loadError = getSharpLoadError();
         logger.warn('Sharp is not available - resize will be skipped');
         if (loadError !== null && loadError !== undefined) {
-          logger.error('Sharp load error', toErrorFields(loadError));
+          logger.error(loadError, { context: 'sharp-load' });
         }
       }
 
@@ -260,7 +259,7 @@ export class PasteHandler {
 
       // Log and return error
       const message = getUserErrorMessage(error);
-      logger.error('Paste failed', toErrorFields(error));
+      logger.error(error, { context: 'paste' });
 
       return {
         success: false,

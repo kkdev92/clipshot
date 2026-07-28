@@ -139,9 +139,9 @@ export function isClipShotError(error: unknown): error is ClipShotError {
 /**
  * Convert an unknown thrown value into structured logger fields
  *
- * vscode-ext-kit's Logger takes structured fields (Record) rather than
- * printf-style varargs, so caught errors have to be normalized before
- * they can be attached to a log entry.
+ * `logger.error()` accepts an unknown directly, but the other levels take
+ * (message, fields), so a caught error logged as a warning still has to be
+ * normalized before it can be attached to the entry.
  *
  * @param error - The caught value
  * @returns Fields describing the error, ready to pass as the logger's second argument
