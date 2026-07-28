@@ -160,7 +160,7 @@ export class PasteHandler {
         const loadError = getSharpLoadError();
         logger.warn('Sharp is not available - resize will be skipped');
         if (loadError !== null && loadError !== undefined) {
-          logger.error('Sharp load error', loadError);
+          logger.error(loadError, { context: 'sharp-load' });
         }
       }
 
@@ -259,7 +259,7 @@ export class PasteHandler {
 
       // Log and return error
       const message = getUserErrorMessage(error);
-      logger.error('Paste failed', error);
+      logger.error(error, { context: 'paste' });
 
       return {
         success: false,

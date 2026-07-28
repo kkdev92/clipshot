@@ -18,8 +18,10 @@ esbuild.mjs
 .env.*
 .env.example
 
-# node_modules - managed by bundleDependencies in package.json
-# sharp and all its dependencies are automatically included
+# node_modules - managed by bundleDependencies in package.json.
+# Only sharp ships: it stays external to the esbuild bundle because of its
+# native binaries. @kkdev92/vscode-ext-kit is a devDependency because esbuild
+# inlines it into dist/extension.js, so shipping it too would be dead weight.
 work/**
 
 # Documentation (keep README)

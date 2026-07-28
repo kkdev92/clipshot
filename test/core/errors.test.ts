@@ -16,6 +16,7 @@ import {
   NoWorkspaceError,
   isClipShotError,
   getUserErrorMessage,
+  toErrorFields,
 } from '../../src/core/errors';
 
 describe('Error Classes', () => {
@@ -391,6 +392,42 @@ describe('getUserErrorMessage', () => {
     it('should return default message for arrays', () => {
       expect(getUserErrorMessage(['error1', 'error2'])).toBe('An unknown error occurred');
     });
+  });
+});
+
+describe('toErrorFields', () => {
+  it('should expose message, name and stack for an Error', () => {
+    const error = new Error('boom');
+
+    const fields = toErrorFields(error);
+
+    expect(fields.error).toBe('boom');
+    expect(fields.errorName).toBe('Error');
+    expect(fields.stack).toBe(error.stack);
+  });
+
+  it('should keep the subclass name for a ClipShotError', () => {
+    const fields = toErrorFields(new ClipboardError('read failed'));
+
+    expect(fields.error).toBe('read failed');
+    expect(fields.errorName).toBe('ClipboardError');
+  });
+
+  it('should omit stack when the Error has none', () => {
+    const error = new Error('no stack');
+    delete error.stack;
+
+    const fields = toErrorFields(error);
+
+    expect(fields.error).toBe('no stack');
+    expect('stack' in fields).toBe(false);
+  });
+
+  it('should stringify non-Error values', () => {
+    expect(toErrorFields('plain string')).toEqual({ error: 'plain string' });
+    expect(toErrorFields(42)).toEqual({ error: '42' });
+    expect(toErrorFields(null)).toEqual({ error: 'null' });
+    expect(toErrorFields(undefined)).toEqual({ error: 'undefined' });
   });
 });
 

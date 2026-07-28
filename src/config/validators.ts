@@ -3,7 +3,7 @@
  * Validates user settings to prevent security issues
  */
 
-import type { ValidationResult, ExtensionConfig } from '../core/types';
+import type { ValidationResult, ExtensionConfig, DeepPartial } from '../core/types';
 import {
   LIMITS,
   VALID_PATTERN_TOKENS,
@@ -332,7 +332,7 @@ export function validateResizePreset(value: string | null): ValidationResult {
  * @param config - The configuration object
  * @returns Validation result with all errors
  */
-export function validateConfiguration(config: Partial<ExtensionConfig>): ValidationResult {
+export function validateConfiguration(config: DeepPartial<ExtensionConfig>): ValidationResult {
   const allErrors: string[] = [];
 
   // Validate saveDirectory
@@ -414,8 +414,8 @@ export function validateConfiguration(config: Partial<ExtensionConfig>): Validat
  * @param config - The raw configuration
  * @returns Sanitized configuration
  */
-export function sanitizeConfiguration(config: Partial<ExtensionConfig>): Partial<ExtensionConfig> {
-  const sanitized: Partial<ExtensionConfig> = { ...config };
+export function sanitizeConfiguration(config: DeepPartial<ExtensionConfig>): DeepPartial<ExtensionConfig> {
+  const sanitized: DeepPartial<ExtensionConfig> = { ...config };
 
   // Sanitize saveDirectory - remove leading/trailing whitespace and normalize separators
   if (sanitized.saveDirectory !== undefined && sanitized.saveDirectory !== '') {
@@ -501,7 +501,7 @@ export function sanitizeConfiguration(config: Partial<ExtensionConfig>): Partial
  * @param config - The configuration object
  * @returns Array of warning messages
  */
-export function getConfigurationWarnings(config: Partial<ExtensionConfig>): string[] {
+export function getConfigurationWarnings(config: DeepPartial<ExtensionConfig>): string[] {
   const warnings: string[] = [];
 
   // Warn if resize dimensions are set but mode is 'off'

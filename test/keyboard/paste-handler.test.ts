@@ -4,28 +4,10 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { createMockLogger } from '@kkdev92/vscode-ext-kit/testing';
 import type { ExtensionConfig, ProcessedImage, Logger, ClipboardData } from '../../src/core/types';
 
-// Mock vscode module
-vi.mock('vscode', () => ({
-  window: {
-    activeTextEditor: undefined,
-  },
-  workspace: {
-    workspaceFolders: undefined,
-  },
-  commands: {
-    executeCommand: vi.fn(),
-  },
-  env: {
-    clipboard: {
-      writeText: vi.fn(),
-    },
-  },
-  Uri: {
-    file: (path: string) => ({ fsPath: path }),
-  },
-}));
+// The vscode module is mocked globally in test/setup.ts.
 
 // Mock clipboard manager
 vi.mock('../../src/clipboard/clipboard-manager', () => ({
@@ -41,16 +23,6 @@ import * as vscode from 'vscode';
 import { PasteHandler, getPasteHandler } from '../../src/keyboard/paste-handler';
 import { getClipboardManager } from '../../src/clipboard/clipboard-manager';
 import { ImageProcessor } from '../../src/image/image-processor';
-
-// Create mock logger
-function createMockLogger(): Logger {
-  return {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  };
-}
 
 // Create mock config
 function createMockConfig(overrides: Partial<ExtensionConfig> = {}): ExtensionConfig {
@@ -127,7 +99,7 @@ describe('PasteHandler', () => {
     vi.clearAllMocks();
 
     handler = new PasteHandler();
-    mockLogger = createMockLogger();
+    mockLogger = createMockLogger(vi);
 
     // Setup clipboard manager mock
     mockClipboardManager = {

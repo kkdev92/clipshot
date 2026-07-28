@@ -137,6 +137,27 @@ export function isClipShotError(error: unknown): error is ClipShotError {
 }
 
 /**
+ * Convert an unknown thrown value into structured logger fields
+ *
+ * `logger.error()` accepts an unknown directly, but the other levels take
+ * (message, fields), so a caught error logged as a warning still has to be
+ * normalized before it can be attached to the entry.
+ *
+ * @param error - The caught value
+ * @returns Fields describing the error, ready to pass as the logger's second argument
+ */
+export function toErrorFields(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      error: error.message,
+      errorName: error.name,
+      ...(error.stack !== undefined && { stack: error.stack }),
+    };
+  }
+  return { error: String(error) };
+}
+
+/**
  * Get user-friendly error message from any error
  */
 export function getUserErrorMessage(error: unknown): string {

@@ -1,0 +1,13 @@
+{
+  "//": "Tests resolve @kkdev92/vscode-ext-kit/testing, which is a subpath export. The root config's classic 'Node' resolution ignores the exports map, so tests type-check under bundler resolution instead (Vitest resolves the same way).",
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "rootDir": "..",
+    "noEmit": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["./**/*.ts", "../src/**/*.ts"],
+  "exclude": ["./e2e/**"]
+}

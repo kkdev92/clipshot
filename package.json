@@ -2,7 +2,7 @@
   "name": "clipshot",
   "displayName": "ClipShot",
   "description": "Paste clipboard images with automatic file saving - perfect for AI chat and documentation",
-  "version": "0.1.13",
+  "version": "0.2.0",
   "publisher": "kkdev92",
   "author": {
     "name": "kkdev92",
@@ -225,6 +225,7 @@
     "bundle:watch": "node esbuild.mjs --watch",
     "compile": "tsc -p ./",
     "compile:e2e": "tsc -p ./test/e2e/tsconfig.json",
+    "typecheck:test": "tsc -p ./test/tsconfig.json",
     "watch": "tsc -watch -p ./",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
@@ -234,13 +235,14 @@
     "test:unit": "vitest run test/image test/clipboard test/security test/config test/keyboard",
     "test:integration": "vitest run test/integration/",
     "test:platform": "vitest run test/clipboard/providers/",
-    "test:e2e": "npm run compile:e2e && node ./test/e2e/runTests.js",
+    "test:e2e": "npm run compile:e2e && node ./test/e2e/out/runTests.js",
     "package": "vsce package",
     "verify:vsix": "node scripts/verify-vsix.mjs",
     "clean": "rimraf dist out"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
+    "@kkdev92/vscode-ext-kit": "^1.1.0",
     "@types/glob": "^8.1.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.0.0",
@@ -258,11 +260,9 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "@kkdev92/vscode-ext-kit": "^0.4.0",
     "sharp": "^0.34.5"
   },
   "bundleDependencies": [
-    "@kkdev92/vscode-ext-kit",
     "sharp"
   ]
 }

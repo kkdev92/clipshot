@@ -24,6 +24,7 @@ Great for markdown docs, notes, and AI chats.
 - [Platform Requirements](#platform-requirements)
 - [Security](#security)
 - [Troubleshooting](#troubleshooting)
+- [Changelog](#changelog)
 - [Contributing](#contributing)
 - [Support & Maintenance Policy](#support--maintenance-policy)
 - [License](#license)
@@ -105,6 +106,7 @@ By default (`auto` mode), ClipShot detects the file type and uses the appropriat
 | Setting                       | Default                                           | Description                                          |
 | ----------------------------- | ------------------------------------------------- | ---------------------------------------------------- |
 | `clipshot.enabled`            | `true`                                            | Enable/disable the extension                         |
+| `clipshot.logLevel`           | `info`                                            | Output channel log level (trace/debug/info/warn/error/silent) |
 | `clipshot.saveDirectory`      | `.clipshot`                                       | Directory to save images                             |
 | `clipshot.fileName.pattern`   | `image_${yyyy}${MM}${dd}_${HH}${mm}${ss}_${seq3}` | File name pattern                                    |
 | `clipshot.output.format`      | `png`                                             | Output format (png/jpeg/webp)                        |
@@ -226,6 +228,15 @@ For security concerns, please see [SECURITY.md](SECURITY.md).
 
 - **Image not saved**: Check that a workspace folder is open
 - **Path not inserted**: Ensure the cursor is in an editable area
+- **Need more detail in the logs**: Set `clipshot.logLevel` to `debug` or `trace`
+  and open **View → Output → clipshot**. This setting alone controls what is
+  logged — no separate _Developer: Set Log Level_ step is required.
+
+---
+
+## Changelog
+
+Release notes are in [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
