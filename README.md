@@ -2,8 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/kkdev92/clipshot/actions/workflows/ci.yml/badge.svg)](https://github.com/kkdev92/clipshot/actions/workflows/ci.yml)
-[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/kkdev92.clipshot)](https://marketplace.visualstudio.com/items?itemName=kkdev92.clipshot)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
+[![VS Code Marketplace](https://vsmarketplacebadges.dev/version-short/kkdev92.clipshot.svg)](https://marketplace.visualstudio.com/items?itemName=kkdev92.clipshot)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue.svg)](https://www.typescriptlang.org/)
 
 Paste a clipboard image into your workspace and get a relative path at the cursor — one keystroke, no save dialog, no file manager.
 Images are processed on your machine and are never uploaded anywhere.

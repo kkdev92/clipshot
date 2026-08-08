@@ -1,20 +1,24 @@
 {
   "compilerOptions": {
-    "module": "CommonJS",
+    // `Preserve` + `bundler` because esbuild is what resolves and emits: it
+    // reads `dist/extension.js` as CommonJS for the extension host, and
+    // `@kkdev92/vscode-ext-kit` is ESM-only, which Node's own resolution rules
+    // would refuse to import from a CommonJS file. `node10` was the previous
+    // setting and is deprecated in TypeScript 6.
+    "module": "Preserve",
+    "moduleResolution": "bundler",
     "target": "ES2022",
     "lib": ["ES2022", "ESNext.Disposable"],
-    "moduleResolution": "Node",
-    "outDir": "dist",
-    "rootDir": "src",
+    // Type checking only. tsc used to emit into `dist/`, the same directory
+    // esbuild writes the bundle to — so running it after a build replaced
+    // `dist/extension.js` with an unbundled copy of one source file.
+    "noEmit": true,
     "strict": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noImplicitReturns": true,
