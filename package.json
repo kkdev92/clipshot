@@ -132,18 +132,24 @@
           "description": "Image resize mode"
         },
         "clipshot.resize.maxWidth": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "default": 1200,
           "minimum": 1,
           "maximum": 16384,
-          "description": "Maximum image width in pixels (1-16384). Ignored if preset is set."
+          "description": "Maximum image width in pixels (1-16384), or null for no width limit. Ignored if preset is set."
         },
         "clipshot.resize.maxHeight": {
-          "type": "integer",
+          "type": [
+            "integer",
+            "null"
+          ],
           "default": 1200,
           "minimum": 1,
           "maximum": 16384,
-          "description": "Maximum image height in pixels (1-16384). Ignored if preset is set."
+          "description": "Maximum image height in pixels (1-16384), or null for no height limit. Ignored if preset is set."
         },
         "clipshot.resize.preset": {
           "type": [
@@ -242,7 +248,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
-    "@kkdev92/vscode-ext-kit": "^3.0.0-alpha.1",
+    "@kkdev92/vscode-ext-kit": "^3.0.0-alpha.2",
     "@types/glob": "^8.1.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.0.0",

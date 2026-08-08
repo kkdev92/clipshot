@@ -16,61 +16,11 @@
  * `clipshot.fileName.pattern`.
  */
 
-import {
-  defineSettings,
-  setting,
-  type SettingSpec,
-  type ValidationResult,
-} from '@kkdev92/vscode-ext-kit';
+import { defineSettings, setting } from '@kkdev92/vscode-ext-kit';
 
 import { CONFIG_PREFIX, DEFAULTS } from '../core/constants';
 import { sanitizeConfiguration } from './validators';
 import type { ExtensionConfig } from '../core/types';
-
-/**
- * An integer that may also be null.
- *
- * `setting.integer` cannot express this and neither can the other builders,
- * but `SettingSpec` is an ordinary interface — the type is what package.json
- * declares (`["integer", "null"]` collapses to `integer` for the manifest
- * check) and `validate` is the whole of the rule.
- */
-function nullableInteger(defaultValue: number | null): SettingSpec<number | null> {
-  return {
-    type: 'integer',
-    default: defaultValue,
-    scope: 'window',
-    validate: (value): ValidationResult<number | null> => {
-      if (value === null) {
-        return { ok: true, value: null };
-      }
-      return typeof value === 'number' && Number.isInteger(value)
-        ? { ok: true, value }
-        : { ok: false, issues: [{ message: 'expected an integer or null' }] };
-    },
-  };
-}
-
-/** One of a fixed set of strings, or null for "not set". */
-function nullableEnum<const TValues extends readonly [string, ...string[]]>(
-  values: TValues,
-  defaultValue: TValues[number] | null
-): SettingSpec<TValues[number] | null> {
-  return {
-    type: 'string',
-    default: defaultValue,
-    scope: 'window',
-    enum: [null, ...values] as readonly (TValues[number] | null)[],
-    validate: (value): ValidationResult<TValues[number] | null> => {
-      if (value === null) {
-        return { ok: true, value: null };
-      }
-      return typeof value === 'string' && (values as readonly string[]).includes(value)
-        ? { ok: true, value: value as TValues[number] }
-        : { ok: false, issues: [{ message: `expected one of ${values.join(', ')}, or null` }] };
-    },
-  };
-}
 
 /** Every `clipshot.*` setting, and the token its accessor is injected under. */
 export const Settings = defineSettings({
@@ -91,9 +41,16 @@ export const Settings = defineSettings({
     'output.jpegQuality': setting.integer({ default: DEFAULTS.JPEG_QUALITY }),
     'output.webpQuality': setting.integer({ default: DEFAULTS.WEBP_QUALITY }),
     'resize.mode': setting.enum({ values: ['off', 'fit'], default: DEFAULTS.RESIZE_MODE }),
-    'resize.maxWidth': nullableInteger(DEFAULTS.RESIZE_MAX_WIDTH),
-    'resize.maxHeight': nullableInteger(DEFAULTS.RESIZE_MAX_HEIGHT),
-    'resize.preset': nullableEnum(['ai-optimized'], DEFAULTS.RESIZE_PRESET),
+    // Clearable, but with a real default: `null` means "no bound", and the
+    // manifest still ships 1200.
+    'resize.maxWidth': setting.nullable(setting.integer({ default: 1200 })),
+    'resize.maxHeight': setting.nullable(setting.integer({ default: 1200 })),
+    // Unset until chosen: null is the default, and the manifest has to declare
+    // it in the type before VS Code will accept that.
+    'resize.preset': setting.nullable(
+      setting.enum({ values: ['ai-optimized'], default: 'ai-optimized' }),
+      { default: DEFAULTS.RESIZE_PRESET }
+    ),
     'insert.format': setting.enum({
       values: ['auto', 'path', 'markdown', 'html'],
       default: DEFAULTS.INSERT_FORMAT,
