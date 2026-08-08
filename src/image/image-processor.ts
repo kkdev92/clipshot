@@ -59,8 +59,9 @@ async function loadSharp(): Promise<SharpModule | null> {
   sharpLoadAttempted = true;
 
   try {
-    // Dynamic import to handle cases where Sharp is not available
-    sharpModule = (await import('sharp')) as SharpModule;
+    // Dynamic import to handle cases where Sharp is not available. No cast:
+    // `bundler` resolution reads sharp's own types, which already match.
+    sharpModule = await import('sharp');
 
     // Each paste runs a one-shot pipeline that never hits libvips'
     // operation cache; disable it so the long-lived extension host
