@@ -5,6 +5,30 @@ All notable changes to the ClipShot extension are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-08-08
+
+A packaging release. Nothing in the extension behaves differently — the reason
+to publish it is that the Marketplace page renders the README from the published
+VSIX, and 0.3.0's was wrong in a way only a reader could see.
+
+### Fixed
+
+- **The Marketplace badge said "retired badge".** shields.io retired the
+  `visual-studio-marketplace/v` endpoint. The badge row now matches the other
+  extensions in this account, which had already moved.
+
+### Changed
+
+- **TypeScript 5.9 to 6.0.3**, the newest of that line — 7.0.2 is npm's `latest`
+  but `typescript-eslint` still caps below 6.1, so 6.0 is the ceiling for
+  anything that type-aware-lints. `moduleResolution` moved off the deprecated
+  `node10` to `bundler` at the same time, which is the pairing this build
+  actually has: esbuild resolves and emits.
+- **`tsc` no longer emits.** `compile` is a type check everywhere it is used,
+  but it was writing into `dist/` — the directory esbuild writes the bundle to —
+  so running it after a build replaced `dist/extension.js` with an unbundled
+  copy of one source file.
+
 ## [0.3.0] - 2026-08-08
 
 Rebuilt on `@kkdev92/vscode-ext-kit` 3.x. What changed is how the extension
@@ -186,6 +210,7 @@ Initial release.
   (PNG/JPEG/WebP) and quality.
 - Path validation and sanitization to keep saved files inside the workspace.
 
+[0.3.1]: https://github.com/kkdev92/clipshot/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/kkdev92/clipshot/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kkdev92/clipshot/compare/v0.1.13...v0.2.0
 [0.1.13]: https://github.com/kkdev92/clipshot/compare/v0.1.12...v0.1.13
