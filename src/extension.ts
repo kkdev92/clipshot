@@ -108,9 +108,24 @@ function warnAboutConfig(config: ExtensionConfig, logger: Logger): void {
  * `setContext` is the only way a `when` clause in package.json can see a
  * setting, and there is no capability for it — a command is how VS Code
  * exposes it, so this is the one place the extension calls one directly.
+ *
+ * A failure here is reported and swallowed rather than propagated. The caller
+ * is a settings-change listener and an activation path, and neither has a way
+ * to act on it: the extension is still usable with a stale `when` clause, and
+ * failing activation over a menu item's visibility would be the worse outcome.
+ * It matters in practice because `setContext` is a VS Code built-in rather than
+ * something this extension registers, so a test double that only knows
+ * registered commands rejects it.
  */
-async function publishContextKeys(config: ExtensionConfig): Promise<void> {
-  await vscode.commands.executeCommand('setContext', CONTEXT_KEYS.ENABLED, config.enabled);
+async function publishContextKeys(config: ExtensionConfig, logger: Logger): Promise<void> {
+  try {
+    await vscode.commands.executeCommand('setContext', CONTEXT_KEYS.ENABLED, config.enabled);
+  } catch (error) {
+    logger.debug('Could not publish the context key', {
+      key: CONTEXT_KEYS.ENABLED,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 /** Whether a notification of this kind should be shown at all. */
@@ -181,20 +196,22 @@ export const clipshot = defineModule('clipshot', (module): undefined => {
     id: 'clipshot.configuration',
     inject: { settings: Settings.token },
     start: async (context, { settings }) => {
-      const apply = (): void => {
+      const apply = async (): Promise<void> => {
         const config = loadConfiguration(settings);
-        warnAboutConfig(config, filtered(context.logger, config.logLevel));
-        void publishContextKeys(config);
+        const logger = filtered(context.logger, config.logLevel);
+        warnAboutConfig(config, logger);
+        await publishContextKeys(config, logger);
       };
-      apply();
+      // Awaited here so the context key is set before activation reports done;
+      // `publishContextKeys` swallows its own failure, so this cannot reject.
+      await apply();
       // `onDidChange` fires for the section as a whole. Every key here feeds
       // either the context key or the warnings, so there is nothing to filter
       // on — `watch` per key would be sixteen subscriptions doing one job.
       subscription = settings.onDidChange(() => {
         context.logger.info('Configuration updated');
-        apply();
+        void apply();
       });
-      await Promise.resolve();
     },
     stop: () => {
       subscription?.dispose();
