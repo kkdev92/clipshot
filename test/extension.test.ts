@@ -15,7 +15,7 @@ vi.mock('../src/keyboard/paste-handler', () => ({
 
 import * as vscode from 'vscode';
 import { activate, deactivate } from '../src/extension';
-import { COMMANDS, CONTEXT_KEYS, EXTENSION_ID } from '../src/core/constants';
+import { COMMANDS, CONTEXT_KEYS, EXTENSION_NAME } from '../src/core/constants';
 import { getPasteHandler } from '../src/keyboard/paste-handler';
 import type { PasteResult } from '../src/core/types';
 
@@ -71,13 +71,19 @@ describe('extension', () => {
       );
     });
 
-    it('creates a plain output channel named after the extension', () => {
+    it('logs into a LogOutputChannel named after the application', () => {
       activate(createContext());
 
-      // No `{ log: true }` second argument: channelMode 'plain' keeps
-      // clipshot.logLevel the only filter (a LogOutputChannel would apply
-      // VS Code's own log level on top of it).
-      expect(vscode.window.createOutputChannel).toHaveBeenCalledWith(EXTENSION_ID);
+      // This used to be a plain channel, so that `clipshot.logLevel` was the
+      // only thing filtering it. The framework logs into a LogOutputChannel
+      // and does no filtering of its own, which is what gives the Output
+      // panel's level dropdown and `Developer: Set Log Level` something to act
+      // on — and what makes `clipshot.logLevel` a floor on top of VS Code's
+      // level rather than the only one. The name is the display name now,
+      // because that is what the dropdown shows.
+      expect(vscode.window.createOutputChannel).toHaveBeenCalledWith(EXTENSION_NAME, {
+        log: true,
+      });
     });
 
     it('publishes the enabled context key', () => {

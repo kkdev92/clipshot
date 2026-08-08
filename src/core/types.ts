@@ -38,12 +38,18 @@ export type ResizeMode = 'off' | 'fit';
 export type ResizePreset = 'ai-optimized';
 
 /**
- * Re-export Logger and LogLevel from vscode-ext-kit
- * (imported rather than re-exported directly so this module can also
- * reference LogLevel in its own declarations below)
+ * The logger is the framework's; the level is ours.
+ *
+ * `clipshot.logLevel` is a setting this extension declares, so its value type
+ * belongs here — the framework has no opinion about what levels an extension
+ * offers a user, only about the four methods a logger has. `silent` is in the
+ * list because turning the channel off is a thing to ask for, and it is not a
+ * severity anything is ever logged at.
  */
-import type { Logger, LogLevel } from '@kkdev92/vscode-ext-kit';
-export type { Logger, LogLevel };
+import type { Logger } from '@kkdev92/vscode-ext-kit';
+export type { Logger };
+
+export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'silent';
 
 /**
  * Clipboard data returned from clipboard providers

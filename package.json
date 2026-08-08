@@ -18,7 +18,7 @@
     "url": "https://github.com/kkdev92/clipshot/issues"
   },
   "engines": {
-    "vscode": "^1.96.0"
+    "vscode": "^1.125.0"
   },
   "categories": [
     "Formatters",
@@ -242,11 +242,11 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
-    "@kkdev92/vscode-ext-kit": "^1.1.0",
+    "@kkdev92/vscode-ext-kit": "^3.0.0-alpha.1",
     "@types/glob": "^8.1.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.0.0",
-    "@types/vscode": "^1.96.0",
+    "@types/vscode": "~1.125.0",
     "@vitest/coverage-v8": "^4.0.17",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.7.1",
