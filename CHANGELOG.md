@@ -5,6 +5,54 @@ All notable changes to the ClipShot extension are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-08-08
+
+Rebuilt on `@kkdev92/vscode-ext-kit` 3.x. What changed is how the extension
+starts and stops, not what it does — every command behaves as it did, and
+clipboard access, image processing and path safety were not touched.
+
+### Breaking
+
+- **VS Code 1.125 or later is now required**, up from 1.96. The framework's
+  minimum cascades here. Installations on older versions keep 0.2.0 and stop
+  receiving updates.
+- **`clipshot.logLevel` is a floor again, not the only filter.** 0.2.0 made it
+  authoritative on purpose, by choosing a plain output channel. The channel is
+  now a `LogOutputChannel`, and VS Code decides what one of those shows — an
+  extension cannot raise its own channel's level, so the setting can make the
+  log quieter but can no longer turn on output VS Code is already dropping.
+
+  To see `debug` messages, set the level with _Developer: Set Log Level_ and
+  pick **ClipShot**. That is a per-channel level, and it persists across
+  restarts — set it once when you are chasing something and it stays until you
+  change it, without touching the global level or your settings file. In
+  exchange the channel gains per-level colouring and the panel's own filter.
+  `clipshot.logLevel` is kept because `silent` and "warnings only" are still
+  worth asking for.
+- **The output channel is named "ClipShot"**, not "clipshot". If you had it
+  pinned in the Output panel, select it again.
+
+### Fixed
+
+- **The resize bounds can be cleared.** `clipshot.resize.maxWidth` and
+  `clipshot.resize.maxHeight` accept `null`, meaning no limit on that axis, and
+  the code has always treated them that way — but they were declared as plain
+  integers, so the settings editor refused the value. A feature that shipped and
+  could not be reached.
+- **Shutdown waits for its own cleanup.** The clipboard handle and any leftover
+  temporary file are released asynchronously, and `deactivate()` used to race VS
+  Code disposing the extension's subscriptions underneath it. That teardown is
+  now owned by the framework and awaited within the shutdown budget.
+
+### Changed
+
+- Activation is one declaration, validated before VS Code is touched: a
+  duplicate id or a missing dependency fails at import rather than
+  half-registering at runtime.
+- The README is rewritten. It had promised the opposite of the log-level
+  behaviour above, never named a required VS Code version, and was missing five
+  settings from its table.
+
 ## [0.2.0] - 2026-07-28
 
 ### Fixed
@@ -138,6 +186,7 @@ Initial release.
   (PNG/JPEG/WebP) and quality.
 - Path validation and sanitization to keep saved files inside the workspace.
 
+[0.3.0]: https://github.com/kkdev92/clipshot/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kkdev92/clipshot/compare/v0.1.13...v0.2.0
 [0.1.13]: https://github.com/kkdev92/clipshot/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/kkdev92/clipshot/compare/v0.1.11...v0.1.12

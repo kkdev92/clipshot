@@ -15,7 +15,7 @@ vi.mock('../src/keyboard/paste-handler', () => ({
 
 import * as vscode from 'vscode';
 import { activate, deactivate } from '../src/extension';
-import { COMMANDS, CONTEXT_KEYS, EXTENSION_ID } from '../src/core/constants';
+import { COMMANDS, CONTEXT_KEYS, EXTENSION_NAME } from '../src/core/constants';
 import { getPasteHandler } from '../src/keyboard/paste-handler';
 import type { PasteResult } from '../src/core/types';
 
@@ -26,8 +26,12 @@ function createContext(): vscode.ExtensionContext {
 /**
  * Activate the extension and return the registered paste command handler.
  */
-function activateAndGetPasteCommand(): () => Promise<void> {
-  activate(createContext());
+async function activateAndGetPasteCommand(): Promise<() => Promise<void>> {
+  // `activate` is asynchronous in the v3 kit: hosted services start inside it.
+  // Not awaiting it leaves activation racing the assertions, and racing the
+  // `deactivate()` in afterEach — which rejects the in-flight start with
+  // `application-stopping`.
+  await activate(createContext());
 
   const call = vi
     .mocked(vscode.commands.registerCommand)
@@ -62,8 +66,8 @@ describe('extension', () => {
   });
 
   describe('activate', () => {
-    it('registers the paste image command', () => {
-      activate(createContext());
+    it('registers the paste image command', async () => {
+      await activate(createContext());
 
       expect(vscode.commands.registerCommand).toHaveBeenCalledWith(
         COMMANDS.PASTE_IMAGE,
@@ -71,17 +75,23 @@ describe('extension', () => {
       );
     });
 
-    it('creates a plain output channel named after the extension', () => {
-      activate(createContext());
+    it('logs into a LogOutputChannel named after the application', async () => {
+      await activate(createContext());
 
-      // No `{ log: true }` second argument: channelMode 'plain' keeps
-      // clipshot.logLevel the only filter (a LogOutputChannel would apply
-      // VS Code's own log level on top of it).
-      expect(vscode.window.createOutputChannel).toHaveBeenCalledWith(EXTENSION_ID);
+      // This used to be a plain channel, so that `clipshot.logLevel` was the
+      // only thing filtering it. The framework logs into a LogOutputChannel
+      // and does no filtering of its own, which is what gives the Output
+      // panel's level dropdown and `Developer: Set Log Level` something to act
+      // on — and what makes `clipshot.logLevel` a floor on top of VS Code's
+      // level rather than the only one. The name is the display name now,
+      // because that is what the dropdown shows.
+      expect(vscode.window.createOutputChannel).toHaveBeenCalledWith(EXTENSION_NAME, {
+        log: true,
+      });
     });
 
-    it('publishes the enabled context key', () => {
-      activate(createContext());
+    it('publishes the enabled context key', async () => {
+      await activate(createContext());
 
       expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
         'setContext',
@@ -90,22 +100,22 @@ describe('extension', () => {
       );
     });
 
-    it('registers disposables on the extension context', () => {
+    it('registers disposables on the extension context', async () => {
       const context = createContext();
 
-      activate(context);
+      await activate(context);
 
       expect(context.subscriptions.length).toBeGreaterThan(0);
     });
 
-    it('subscribes to configuration changes', () => {
-      activate(createContext());
+    it('subscribes to configuration changes', async () => {
+      await activate(createContext());
 
       expect(vscode.workspace.onDidChangeConfiguration).toHaveBeenCalled();
     });
 
-    it('refreshes the context key when configuration changes', () => {
-      activate(createContext());
+    it('refreshes the context key when configuration changes', async () => {
+      await activate(createContext());
 
       // Two listeners are registered: the logger's level sync and the
       // config schema's section watcher. Fire both.
@@ -141,7 +151,7 @@ describe('extension', () => {
     it('reports the saved path when the image was inserted', async () => {
       stubPasteResult({ success: true, processedImage });
 
-      await activateAndGetPasteCommand()();
+      await (await activateAndGetPasteCommand())();
 
       const [message] = notifiedMessages(vscode.window.showInformationMessage);
       expect(message).toContain('./.clipshot/image_001.png');
@@ -152,7 +162,7 @@ describe('extension', () => {
     it('tells the user to paste manually when the path went to the clipboard', async () => {
       stubPasteResult({ success: true, processedImage, copiedToClipboard: true });
 
-      await activateAndGetPasteCommand()();
+      await (await activateAndGetPasteCommand())();
 
       expect(notifiedMessages(vscode.window.showInformationMessage)[0]).toContain(
         'Path copied'
@@ -162,7 +172,7 @@ describe('extension', () => {
     it('surfaces a failure as an error notification', async () => {
       stubPasteResult({ success: false, error: 'No image in clipboard' });
 
-      await activateAndGetPasteCommand()();
+      await (await activateAndGetPasteCommand())();
 
       expect(notifiedMessages(vscode.window.showErrorMessage)[0]).toContain(
         'No image in clipboard'
@@ -172,7 +182,7 @@ describe('extension', () => {
     it('stays silent when a failure carries no message', async () => {
       stubPasteResult({ success: false });
 
-      await activateAndGetPasteCommand()();
+      await (await activateAndGetPasteCommand())();
 
       expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
       expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
@@ -181,7 +191,7 @@ describe('extension', () => {
     it('stays silent on success without a processed image', async () => {
       stubPasteResult({ success: true });
 
-      await activateAndGetPasteCommand()();
+      await (await activateAndGetPasteCommand())();
 
       expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
       expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
@@ -190,7 +200,7 @@ describe('extension', () => {
 
   describe('deactivate', () => {
     it('completes without throwing when the extension was activated', async () => {
-      activate(createContext());
+      await activate(createContext());
 
       await expect(deactivate()).resolves.toBeUndefined();
     });
