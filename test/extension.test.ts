@@ -100,6 +100,28 @@ describe('extension', () => {
       );
     });
 
+    it('activates anyway when the context key cannot be published', async () => {
+      // `setContext` is a VS Code built-in rather than something this extension
+      // registers, so a host that does not know it rejects the call. That must
+      // not fail activation: a stale `when` clause is a worse outcome to trade
+      // a working extension for.
+      //
+      // This used to be covered by accident — the kit's mock rejected every
+      // unregistered command, `setContext` included. It answers that one now,
+      // which is more faithful and left this path untested.
+      vi.mocked(vscode.commands.executeCommand).mockRejectedValueOnce(
+        new Error("command 'setContext' not found")
+      );
+
+      // Resolves rather than rejects: the failure is logged and swallowed.
+      await expect(activate(createContext())).resolves.toBeUndefined();
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'setContext',
+        CONTEXT_KEYS.ENABLED,
+        true
+      );
+    });
+
     it('registers disposables on the extension context', async () => {
       const context = createContext();
 
