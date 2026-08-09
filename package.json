@@ -246,6 +246,11 @@
     "verify:vsix": "node scripts/verify-vsix.mjs",
     "clean": "rimraf dist out"
   },
+  "//overrides": "mocha 11.8.0 is the latest and still pins serialize-javascript ^6.0.2 and diff ^7, both of which carry advisories with no upstream release to move to. mocha uses the first to serialize test results and the second to render assertion diffs; neither sees anything but this repository's own test output. Drop these once mocha ships the newer ranges.",
+  "overrides": {
+    "serialize-javascript": "^7.1.0",
+    "diff": "^8.0.3"
+  },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
     "@kkdev92/vscode-ext-kit": "^3.0.0",
@@ -256,7 +261,7 @@
     "@vitest/coverage-v8": "^4.0.17",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.7.1",
-    "esbuild": "^0.27.3",
+    "esbuild": "^0.28.2",
     "eslint": "^9.39.2",
     "glob": "^11.0.0",
     "mocha": "^11.7.5",
