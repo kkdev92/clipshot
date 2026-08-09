@@ -5,6 +5,21 @@ All notable changes to the ClipShot extension are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-08-09
+
+### Security
+
+- **Updated `sharp` to 0.35.3**, closing GHSA-f88m-g3jw-g9cj — four libvips
+  CVEs (2026-33327, -33328, -35590, -35591) that affect every version below
+  0.35.0. `sharp` is the only runtime dependency this extension packages, and it
+  processes exactly the untrusted input the extension exists to handle: whatever
+  image you have on the clipboard. Nothing about the extension's behaviour
+  changes.
+
+  The floor is 0.35.3 rather than the patched 0.35.0 because that release ships
+  a broken `exports` map that hides its own type declarations from modern
+  TypeScript resolution; upstream fixed it in 0.35.1.
+
 ## [0.3.1] - 2026-08-08
 
 A packaging release. Nothing in the extension behaves differently — the reason
@@ -210,6 +225,7 @@ Initial release.
   (PNG/JPEG/WebP) and quality.
 - Path validation and sanitization to keep saved files inside the workspace.
 
+[0.3.2]: https://github.com/kkdev92/clipshot/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/kkdev92/clipshot/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/kkdev92/clipshot/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/kkdev92/clipshot/compare/v0.1.13...v0.2.0
