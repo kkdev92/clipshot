@@ -18,7 +18,7 @@
     "url": "https://github.com/kkdev92/clipshot/issues"
   },
   "engines": {
-    "node": ">=24.0.0",
+    "node": ">=22.12.0",
     "vscode": "^1.125.0"
   },
   "categories": [
@@ -242,7 +242,8 @@
     "test:unit": "vitest run test/image test/clipboard test/security test/config test/keyboard",
     "test:integration": "vitest run test/integration/",
     "test:platform": "vitest run test/clipboard/providers/",
-    "test:e2e": "npm run compile:e2e && node ./test/e2e/out/runTests.js",
+    "test:e2e": "npm run bundle && npm run compile:e2e && node ./test/e2e/out/runTests.js",
+    "verify": "npm run lint && npm run compile && npm run typecheck:test && npm run test:coverage && npm run test:e2e",
     "package": "vsce package",
     "verify:vsix": "node scripts/verify-vsix.mjs",
     "clean": "rimraf dist out"
