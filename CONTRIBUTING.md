@@ -10,9 +10,9 @@ Please be respectful and constructive in all interactions.
 
 ### Prerequisites
 
-- Node.js 20.x or later
+- Node.js 22.12 or later (what CI builds on)
 - npm 10.x or later
-- VS Code 1.90.0 or later
+- VS Code 1.125.0 or later — the minimum the extension declares
 - Git
 
 ### Development Setup
@@ -64,20 +64,38 @@ src/
 
 2. Make your changes
 
-3. Run linting:
+3. Run the whole gate:
    ```bash
-   npm run lint
+   npm run verify
    ```
 
-4. Run tests:
-   ```bash
-   npm run test
-   ```
+   That is lint, both type checks, the unit tests with coverage, and — last —
+   the end-to-end suite in a real VS Code.
 
-5. Compile:
-   ```bash
-   npm run compile
-   ```
+   The individual lanes are still there (`lint`, `compile`, `typecheck:test`,
+   `test`, `test:coverage`, `test:e2e`) and are what you want while iterating.
+   `npm run verify` is what to run before pushing.
+
+### Why `test:e2e` matters, and why CI does not run it
+
+**CI runs everything except the end-to-end suite.** It needs a full VS Code
+download and a real window per run, which is not free on hosted runners, so it
+is deliberately a local step. That makes it the one lane a green PR does not
+prove — run it yourself.
+
+It is worth the minute. Two bugs have reached `main` that every unit test
+passed through:
+
+- a paste command that never resolved because it awaited its own notification,
+  which only shows up when nobody is there to dismiss the toast
+- a stale `dist/` making the suite test code that was no longer the source
+
+The first is fixed; the second is why `test:e2e` now bundles before it runs, so
+it cannot test a stale build. The first run downloads VS Code (a few hundred MB,
+cached in `.vscode-test/`); after that the suite takes about five seconds.
+
+Judge it by the exit code, not by the numbers it prints — a run can say
+"11 passing" and still exit 1.
 
 ### Commit Messages
 
