@@ -152,6 +152,25 @@ function describeSuccess(result: {
   return `Image saved: ${image.relativePath} (${sizeMB}MB${dims})`;
 }
 
+/**
+ * Show a notification without waiting for it.
+ *
+ * VS Code resolves a notification's thenable when the toast is *dismissed*, not
+ * when it appears. Awaiting one therefore binds the paste command's own promise
+ * to the user closing a popup — `executeCommand('clipshot.pasteImage')` would
+ * not resolve until then. The end-to-end suite, where nobody dismisses
+ * anything, timed out on exactly that.
+ *
+ * Nothing here reads which button was pressed, so there is nothing to wait for.
+ * The `catch` is not decoration: a floating rejection takes the process down
+ * with a non-zero exit even when every test passed.
+ */
+function announce(notification: Promise<unknown>, logger: Logger): void {
+  notification.catch((error: unknown) => {
+    logger.warn(`Notification failed: ${String(error)}`);
+  });
+}
+
 export const clipshot = defineModule('clipshot', (module): undefined => {
   module.settings.add(Settings);
 
@@ -159,6 +178,7 @@ export const clipshot = defineModule('clipshot', (module): undefined => {
     inject: { settings: Settings.token },
     execute: async (context: OperationContext, _args, { settings }): Promise<void> => {
       const config = loadConfiguration(settings);
+      const logger = filtered(context.logger, config.logLevel);
 
       // Read per invocation rather than held from activation: a setting the
       // user changed a moment ago should apply to this paste, and the accessor
@@ -167,13 +187,16 @@ export const clipshot = defineModule('clipshot', (module): undefined => {
         { title: 'ClipShot', cancellable: false },
         async (progress) => {
           progress.report({ message: 'Reading clipboard...' });
-          return getPasteHandler().handlePaste(config, filtered(context.logger, config.logLevel));
+          return getPasteHandler().handlePaste(config, logger);
         }
       );
 
       if (result.success) {
         if (result.processedImage !== undefined && wants(config.notifications.level, 'success')) {
-          await context.notify.info(describeSuccess(result as Parameters<typeof describeSuccess>[0]));
+          announce(
+            context.notify.info(describeSuccess(result as Parameters<typeof describeSuccess>[0])),
+            logger
+          );
         }
         return;
       }
@@ -183,7 +206,7 @@ export const clipshot = defineModule('clipshot', (module): undefined => {
         result.error !== '' &&
         wants(config.notifications.level, 'error')
       ) {
-        await context.notify.error(`Paste failed: ${result.error}`);
+        announce(context.notify.error(`Paste failed: ${result.error}`), logger);
       }
     },
   });
