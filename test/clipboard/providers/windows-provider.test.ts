@@ -228,7 +228,18 @@ describe('WindowsClipboardProvider', () => {
     });
   });
 
-  // Windows-only tests for actual PowerShell execution
+  // Windows-only tests for actual PowerShell execution.
+  //
+  // Each of these starts Windows PowerShell and has it load a .NET assembly,
+  // which on a cold CI runner is seconds of work before any of the test's own
+  // code runs. At 10s they failed on GitHub's windows-latest twice in an hour —
+  // always with the exec timeout, never with a wrong answer — and passed on
+  // re-run every time. What they check is that a type resolves, not how fast,
+  // so the budget is now generous enough that a slow runner is not a failure.
+  // It stays under vitest's own 30s testTimeout, so a genuine hang still fails
+  // rather than hanging the suite.
+  const POWERSHELL_TIMEOUT_MS = 25_000;
+
   describe('PowerShell .NET Type Resolution (Windows only)', () => {
     it('should resolve System.Drawing.Imaging.ImageFormat.Png', async () => {
       if (process.platform !== 'win32') {
@@ -240,7 +251,7 @@ describe('WindowsClipboardProvider', () => {
       // This would have caught the bug where we tried to use numeric value "1"
       const { stdout, stderr } = await execAsync(
         'powershell.exe -NoProfile -Command "Add-Type -AssemblyName System.Drawing; [System.Drawing.Imaging.ImageFormat]::Png.Guid.ToString()"',
-        { timeout: 10000 }
+        { timeout: POWERSHELL_TIMEOUT_MS }
       );
 
       expect(stderr).toBe('');
@@ -255,7 +266,7 @@ describe('WindowsClipboardProvider', () => {
 
       const { stdout, stderr } = await execAsync(
         'powershell.exe -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Clipboard].FullName"',
-        { timeout: 10000 }
+        { timeout: POWERSHELL_TIMEOUT_MS }
       );
 
       expect(stderr).toBe('');
@@ -273,7 +284,7 @@ describe('WindowsClipboardProvider', () => {
       // Use PowerShell parser to validate syntax without executing
       const { stderr } = await execAsync(
         `powershell.exe -NoProfile -Command "$script = [System.Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('${encodedScript}')); $null = [System.Management.Automation.PSParser]::Tokenize($script, [ref]$null); Write-Output 'OK'"`,
-        { timeout: 10000 }
+        { timeout: POWERSHELL_TIMEOUT_MS }
       );
 
       expect(stderr).toBe('');
