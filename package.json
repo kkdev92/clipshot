@@ -266,7 +266,7 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "sharp": "^0.34.5"
+    "sharp": "^0.35.3"
   },
   "bundleDependencies": [
     "sharp"
