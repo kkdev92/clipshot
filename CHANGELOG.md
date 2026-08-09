@@ -5,6 +5,17 @@ All notable changes to the ClipShot extension are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **The paste command no longer stays open until you close its notification.**
+  VS Code resolves a notification's promise when the toast is *dismissed*, not
+  when it appears, and the command was waiting on that. Nothing looked wrong if
+  you pressed the keybinding — but anything invoking `clipshot.pasteImage`
+  programmatically, a `runCommands` sequence or another extension, waited on you
+  to click. The message itself is unchanged.
+
 ## [0.3.2] - 2026-08-09
 
 ### Security
@@ -225,6 +236,7 @@ Initial release.
   (PNG/JPEG/WebP) and quality.
 - Path validation and sanitization to keep saved files inside the workspace.
 
+[Unreleased]: https://github.com/kkdev92/clipshot/compare/v0.3.2...HEAD
 [0.3.2]: https://github.com/kkdev92/clipshot/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/kkdev92/clipshot/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/kkdev92/clipshot/compare/v0.2.0...v0.3.0

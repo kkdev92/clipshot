@@ -218,6 +218,50 @@ describe('extension', () => {
       expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
       expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
     });
+
+    it('resolves without waiting for the notification to be dismissed', async () => {
+      // VS Code resolves a notification's thenable when the toast is
+      // *dismissed*, so awaiting one bound this command to the user closing a
+      // popup. The end-to-end suite, where nobody closes anything, sat through
+      // two 60-second timeouts because of it.
+      //
+      // A notification that never settles stands in for that: the command has
+      // to come back anyway.
+      stubPasteResult({ success: true, processedImage });
+      vi.mocked(vscode.window.showInformationMessage).mockReturnValue(
+        new Promise(() => undefined) as never
+      );
+
+      const command = await activateAndGetPasteCommand();
+      const outcome = await Promise.race([
+        command().then(() => 'returned'),
+        new Promise((resolve) => setTimeout(() => resolve('still waiting'), 500)),
+      ]);
+
+      expect(outcome).toBe('returned');
+      expect(vscode.window.showInformationMessage).toHaveBeenCalled();
+    });
+
+    it('does not leave a failed notification as an unhandled rejection', async () => {
+      // Not awaiting is only half of it. A floating rejection takes the whole
+      // run down with a non-zero exit while every test still reports as passed,
+      // so the `catch` inside `announce` is load-bearing and gets its own test.
+      stubPasteResult({ success: false, error: 'No image in clipboard' });
+      vi.mocked(vscode.window.showErrorMessage).mockRejectedValue(new Error('notification gone'));
+
+      const rejections: unknown[] = [];
+      const record = (reason: unknown): void => void rejections.push(reason);
+      process.on('unhandledRejection', record);
+      try {
+        await (await activateAndGetPasteCommand())();
+        // One turn of the loop is where an unhandled rejection would surface.
+        await new Promise((resolve) => setImmediate(resolve));
+      } finally {
+        process.off('unhandledRejection', record);
+      }
+
+      expect(rejections).toEqual([]);
+    });
   });
 
   describe('deactivate', () => {
