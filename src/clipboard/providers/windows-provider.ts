@@ -73,17 +73,29 @@ $image.Dispose()
 `;
 
 /**
+ * Execution policy passed to PowerShell.
+ *
+ * A constant on purpose. This used to read `CLAUDE_IMG_EXECUTION_POLICY`, which
+ * arrived with the original scaffold, was named after something unrelated to this
+ * extension, and was referenced nowhere else — no documentation, no setting, no
+ * test. What it did do was interpolate an unvalidated string into the command
+ * line below, where a value like `Bypass & something.exe` would have run.
+ *
+ * Nobody who cannot already set this process's environment could reach it, so the
+ * override was never a way in. It was a way to *lower* a security setting with no
+ * record of having done so, which is worth less than nothing.
+ */
+const EXECUTION_POLICY = 'RemoteSigned';
+
+/**
  * Windows clipboard provider using PowerShell
  */
 export class WindowsClipboardProvider extends BaseClipboardProvider {
   private readonly tempFileManager = getTempFileManager();
   private currentTempFile: string | null = null;
-  private readonly executionPolicy: string;
 
   constructor() {
     super('windows');
-    // Allow override via environment variable for enterprise environments
-    this.executionPolicy = process.env['CLAUDE_IMG_EXECUTION_POLICY'] ?? 'RemoteSigned';
   }
 
   async isAvailable(): Promise<boolean> {
@@ -137,7 +149,7 @@ export class WindowsClipboardProvider extends BaseClipboardProvider {
 
     try {
       const { stdout, stderr } = await execAsync(
-        `"${psPath}" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy ${this.executionPolicy} -EncodedCommand ${encodedCommand}`,
+        `"${psPath}" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy ${EXECUTION_POLICY} -EncodedCommand ${encodedCommand}`,
         {
           timeout: TIMEOUTS.CLIPBOARD_READ,
           env: {
