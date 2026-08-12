@@ -2,16 +2,24 @@
 
 ## Supported Versions
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
+| Version        | Supported          |
+| -------------- | ------------------ |
+| 0.3.x          | :white_check_mark: |
+| 0.2.x and older | :x:               |
+
+Fixes ship in a new release rather than as patches to earlier versions.
 
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability:
 
 1. **Do NOT** create a public GitHub issue
-2. Use GitHub's "Report a vulnerability" feature in the Security tab
+2. Open a private report:
+   <https://github.com/kkdev92/clipshot/security/advisories/new>
+
+   That is the **Report a vulnerability** button in the repository's Security
+   tab; the link goes straight to it. Private reporting is enabled, so the
+   advisory stays between us until there is a fix to describe.
 
 ## Security Measures
 
