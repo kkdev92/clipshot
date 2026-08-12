@@ -4,6 +4,13 @@ on:
   release:
     types: [published]
 
+# Every job below already narrows this further. Declaring it here as well is what
+# keeps a job added later from silently inheriting whatever the repository default
+# happens to be at the time — which matters more in the workflow that holds the
+# publishing credential.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest

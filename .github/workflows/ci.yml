@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+# Every job below already narrows this further. Declaring it here as well is what
+# keeps a job added later from silently inheriting whatever the repository default
+# happens to be at the time.
+permissions:
+  contents: read
+
 jobs:
   lint:
     runs-on: ubuntu-latest
