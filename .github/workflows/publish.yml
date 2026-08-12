@@ -79,9 +79,18 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      # The version comes from the lockfile rather than from the range in
+      # package.json. Native targets get sharp through `npm ci`, so they are
+      # already pinned; without this the cross targets re-resolve `^0.35.x` and a
+      # release published in between would ship a different, untested sharp inside
+      # some of the VSIXs of the same version. This is the workflow that publishes
+      # them, so that would reach users.
       - name: Install cross-platform sharp binary
         if: matrix.cross == true
-        run: npm install --cpu=${{ matrix.cross_cpu }} --os=${{ matrix.cross_os }} sharp
+        shell: bash
+        run: |
+          version=$(node -p "require('./package-lock.json').packages['node_modules/sharp'].version")
+          npm install --cpu=${{ matrix.cross_cpu }} --os=${{ matrix.cross_os }} "sharp@$version"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
