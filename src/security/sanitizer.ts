@@ -37,28 +37,6 @@ export function encodePowerShellCommand(script: string): string {
 }
 
 /**
- * Build a safe PowerShell command using Base64 encoding
- * This prevents command injection attacks
- *
- * @param powershellPath - Path to PowerShell executable
- * @param script - The PowerShell script to execute
- * @param executionPolicy - Execution policy (default: RemoteSigned)
- * @returns Safe command string
- */
-export function buildSafePowerShellCommand(
-  powershellPath: string,
-  script: string,
-  executionPolicy: string = 'RemoteSigned'
-): string {
-  const encoded = encodePowerShellCommand(script);
-  // -NoProfile: Don't load user profile (faster and more predictable)
-  // -NonInteractive: Don't prompt for input
-  // -ExecutionPolicy: Set appropriate policy (RemoteSigned is safer than Bypass)
-  // -EncodedCommand: Execute Base64-encoded script (immune to injection)
-  return `"${powershellPath}" -NoProfile -NonInteractive -ExecutionPolicy ${executionPolicy} -EncodedCommand ${encoded}`;
-}
-
-/**
  * Sanitize a file name by removing dangerous characters
  * Works cross-platform
  *

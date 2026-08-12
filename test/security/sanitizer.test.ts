@@ -16,7 +16,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   encodePowerShellCommand,
-  buildSafePowerShellCommand,
   sanitizeFileName,
   containsDangerousChars,
   sanitizeDirectoryPath,
@@ -89,52 +88,6 @@ describe('sanitizer', () => {
         // Verify the encoding doesn't throw
         expect(() => Buffer.from(encoded, 'base64')).not.toThrow();
       }
-    });
-  });
-
-  /**
-   * Tests for safe PowerShell command construction
-   *
-   * This function builds a complete PowerShell invocation with security
-   * best practices:
-   * - -NoProfile: Prevents loading of user profile scripts
-   * - -NonInteractive: Prevents prompts that could hang automation
-   * - -ExecutionPolicy: Controls script execution permissions
-   * - -EncodedCommand: Prevents injection via Base64 encoding
-   */
-  describe('buildSafePowerShellCommand', () => {
-    it('should include all required security flags', () => {
-      const result = buildSafePowerShellCommand('powershell.exe', 'echo test');
-
-      expect(result).toContain('powershell.exe');
-      expect(result).toContain('-NoProfile');
-      expect(result).toContain('-NonInteractive');
-      expect(result).toContain('-ExecutionPolicy');
-      expect(result).toContain('-EncodedCommand');
-    });
-
-    it('should use RemoteSigned as default execution policy', () => {
-      const result = buildSafePowerShellCommand('pwsh', 'echo test');
-
-      // RemoteSigned is safer than Bypass while still allowing local scripts
-      expect(result).toContain('RemoteSigned');
-    });
-
-    it('should accept custom execution policy when specified', () => {
-      const result = buildSafePowerShellCommand(
-        'powershell.exe',
-        'echo test',
-        'Bypass'
-      );
-      expect(result).toContain('Bypass');
-    });
-
-    it('should properly quote paths containing spaces', () => {
-      const pathWithSpaces = 'C:\\Program Files\\PowerShell\\pwsh.exe';
-      const result = buildSafePowerShellCommand(pathWithSpaces, 'test');
-
-      // Path should be wrapped in double quotes
-      expect(result).toContain(`"${pathWithSpaces}"`);
     });
   });
 
