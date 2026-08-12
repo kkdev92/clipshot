@@ -252,7 +252,7 @@
     "@eslint/js": "^10.0.1",
     "@kkdev92/vscode-ext-kit": "^3.0.0",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^22.20.1",
+    "@types/node": "^26.2.0",
     "@types/vscode": "~1.125.0",
     "@vitest/coverage-v8": "^4.0.17",
     "@vscode/test-electron": "^3.1.0",
