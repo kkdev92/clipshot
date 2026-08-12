@@ -60,14 +60,6 @@ jobs:
       - name: Run unit tests with coverage
         run: npm run test:coverage
 
-      - name: Upload coverage (Ubuntu only)
-        if: matrix.os == 'ubuntu-latest'
-        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4.6.0
-        with:
-          files: coverage/lcov.info
-          flags: unit-tests
-          fail_ci_if_error: false
-
   integration-test:
     needs: unit-test
     strategy:
