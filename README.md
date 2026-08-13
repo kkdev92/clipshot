@@ -4,6 +4,7 @@
 [![CI](https://github.com/kkdev92/clipshot/actions/workflows/ci.yml/badge.svg)](https://github.com/kkdev92/clipshot/actions/workflows/ci.yml)
 [![VS Code Marketplace](https://vsmarketplacebadges.dev/version-short/kkdev92.clipshot.svg)](https://marketplace.visualstudio.com/items?itemName=kkdev92.clipshot)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-blue.svg)](https://www.typescriptlang.org/)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14051/badge)](https://www.bestpractices.dev/projects/14051)
 
 Paste a clipboard image into your workspace and get a relative path at the cursor — one keystroke, no save dialog, no file manager.
 Images are processed on your machine and are never uploaded anywhere.
