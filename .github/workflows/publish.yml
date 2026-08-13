@@ -90,6 +90,15 @@ jobs:
       - name: Package extension
         run: npx @vscode/vsce package --target ${{ matrix.target }}
 
+      # The same check CI runs, which this workflow had never had — the commit
+      # that introduced it said "add CI step to verify VSIX before release" and
+      # only landed in ci.yml. It unpacks the VSIX, confirms the target's sharp
+      # binary is inside and loads the module, so a broken package fails here
+      # rather than on a user's machine. `publish` needs every `build`, so one
+      # bad target stops the whole release instead of shipping five of six.
+      - name: Verify VSIX dependencies
+        run: node scripts/verify-vsix.mjs ${{ matrix.target }}
+
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
