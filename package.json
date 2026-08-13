@@ -234,7 +234,7 @@
     "compile:e2e": "tsc -p ./test/e2e/tsconfig.json",
     "typecheck:test": "tsc -p ./test/tsconfig.json",
     "watch": "tsc -watch -p ./",
-    "lint": "eslint src",
+    "lint": "eslint src --max-warnings 0",
     "lint:fix": "eslint src --fix",
     "test": "vitest run",
     "test:watch": "vitest",
