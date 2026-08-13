@@ -11,10 +11,15 @@
  * Two problems with that, both real:
  *
  * - **npm 11 applies `--cpu`/`--os` to the whole dependency tree**, not to the
- *   named package. Installing an arm64 binary replaced the bundler's own x64
- *   one, and the packaging step re-bundles through `vscode:prepublish`, so
+ *   named package — npm documents them as config that overrides `process.arch`
+ *   and `process.platform` for the install, which is ambient rather than
+ *   per-package. Installing an arm64 binary replaced the bundler's own x64 one,
+ *   and the packaging step re-bundles through `vscode:prepublish`, so
  *   reordering does not help. That is why this repository is still on Node 22
  *   while everything else moved to 24.
+ * - Under npm 10, which Node 22 ships, it did not prune the tree either — so
+ *   the host's own binary stayed and went into the VSIX. See the note on the
+ *   prune below; that is a shipping bug this replaces, not a risk it adds.
  * - It re-resolved from the registry, so what landed was pinned by version but
  *   not by content.
  *
@@ -40,7 +45,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 
 const projectRoot = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
@@ -228,10 +233,14 @@ function extract(label, tarball, destination) {
       // The mode is preserved because these are shared libraries and native
       // addons unpacked on the runner that packages them.
       writeFileSync(target, body, { mode: mode === 0 ? 0o644 : mode });
+    } else {
+      // Refused rather than skipped. A GNU long-name header ('L') carries the
+      // *next* entry's path, so skipping it would write that file under its
+      // truncated 100-byte name — a silent corruption. A link ('1'/'2') would
+      // leave a dangling reference. Neither appears in these tarballs today;
+      // if one does, stopping is the outcome that gets noticed.
+      fail(`${label}: unsupported tar entry type '${type}' for ${entryPath}`);
     }
-    // Anything else — links, devices, GNU extensions — is not in an npm
-    // tarball for a prebuilt binary, and silently skipping is right for the
-    // ones that are (`pax_global_header` is handled above).
   }
 }
 
@@ -273,12 +282,14 @@ async function main() {
   // `bundleDependencies: ["sharp"]` makes vsce ship sharp's whole installed
   // closure, and nothing in .vscodeignore excludes a platform package. So the
   // host's own binary — put there by `npm ci` — has to go, or the VSIX carries
-  // two architectures. Measured: leaving it in added 17.5 MB of Linux binaries
-  // to a Windows build.
+  // two architectures.
   //
-  // The old `npm install --cpu/--os` got this for free, as a side effect of
-  // re-evaluating the tree for the target platform. Doing it here is the same
-  // outcome, said out loud.
+  // This is a fix, not a guard. The `npm install --cpu/--os` this replaced did
+  // *not* prune, contrary to what it looked like: diffing the VSIXs the old
+  // pipeline built against these, every cross-target release so far shipped the
+  // build runner's own x64 binary — 17.8 MiB of Linux libvips inside the
+  // linux-arm64 build, 18.3 MiB of Windows DLLs inside win32-arm64 — unused,
+  // to users.
   const imgDir = join(projectRoot, 'node_modules', '@img');
   const stale = readdirSync(imgDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && entry.name.startsWith('sharp-'))
@@ -308,13 +319,20 @@ async function main() {
   console.log(`\n✅ ${target} binaries in place\n`);
 }
 
-try {
-  await main();
-} catch (error) {
-  if (error instanceof Refused) {
-    console.error(`\n❌ ${error.message}\n`);
-    process.exitCode = 1;
-  } else {
-    throw error;
+// Only when run as a command. Importing the module gives a test the real
+// `extract` rather than a copy of it — a second implementation of a format
+// parser would agree with itself and prove nothing.
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    await main();
+  } catch (error) {
+    if (error instanceof Refused) {
+      console.error(`\n❌ ${error.message}\n`);
+      process.exitCode = 1;
+    } else {
+      throw error;
+    }
   }
 }
+
+export { Refused, assertRegistryUrl, collect, extract, verifyIntegrity };
