@@ -71,6 +71,37 @@ function lockKey(name) {
   return `node_modules/${name}`;
 }
 
+/** The only origin this script will fetch from. Every entry in the lockfile
+ * resolves here; anything else is a lockfile worth stopping on. */
+const REGISTRY = 'https://registry.npmjs.org';
+
+/**
+ * Refuses a `resolved` URL that does not point at the npm registry.
+ *
+ * The URL comes out of a file, which CodeQL flags (`js/file-access-to-http`)
+ * and is right to: a request whose destination is read from a file should say
+ * where it is allowed to go. `package-lock.json` is committed and reviewed, and
+ * anyone able to edit it can already run code in this pipeline — but "the
+ * source is trusted" is an argument, whereas this is a check, and it costs one
+ * comparison. The integrity check covers tampered *content*; this covers a
+ * request going somewhere it was never meant to.
+ */
+function assertRegistryUrl(name, resolved) {
+  let url;
+  try {
+    url = new URL(resolved);
+  } catch {
+    fail(`${name} has an unparseable resolved URL in package-lock.json: ${resolved}`);
+  }
+  if (url.origin !== REGISTRY) {
+    fail(
+      `${name} resolves to ${url.origin}, not ${REGISTRY}.\n` +
+        `   This script only fetches npm registry tarballs. Check the lockfile.`
+    );
+  }
+  return `${REGISTRY}${url.pathname}`;
+}
+
 /**
  * Every package the target needs, from the lockfile.
  *
@@ -97,7 +128,14 @@ function collect(lock, rootName) {
       fail(`${name} has no resolved URL or integrity in package-lock.json.`);
     }
 
-    seen.set(name, entry);
+    // The URL that gets fetched is rebuilt from the constant origin and the
+    // validated path, so the destination host cannot come out of the file at
+    // all — only the path within the registry can.
+    seen.set(name, {
+      version: entry.version,
+      integrity: entry.integrity,
+      url: assertRegistryUrl(name, entry.resolved),
+    });
     queue.push(
       ...Object.keys(entry.dependencies ?? {}),
       ...Object.keys(entry.optionalDependencies ?? {})
@@ -215,9 +253,9 @@ async function main() {
   for (const [name, entry] of packages) {
     const destination = join(projectRoot, 'node_modules', ...name.split('/'));
 
-    const response = await fetch(entry.resolved);
+    const response = await fetch(entry.url);
     if (!response.ok) {
-      fail(`${name}: ${entry.resolved} returned HTTP ${response.status}`);
+      fail(`${name}: ${entry.url} returned HTTP ${response.status}`);
     }
     const bytes = Buffer.from(await response.arrayBuffer());
     verifyIntegrity(name, bytes, entry.integrity);
