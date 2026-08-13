@@ -98,7 +98,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Native builds (npm ci installs correct platform binary)
+          # Native builds (npm ci installs the matching binary)
           - os: ubuntu-latest
             target: linux-x64
           - os: macos-15-intel
@@ -107,17 +107,13 @@ jobs:
             target: darwin-arm64
           - os: windows-latest
             target: win32-x64
-          # Cross-platform builds (need explicit platform install)
+          # Cross-platform builds (binary comes from the lockfile)
           - os: ubuntu-latest
             target: linux-arm64
             cross: true
-            cross_cpu: arm64
-            cross_os: linux
           - os: windows-latest
             target: win32-arm64
             cross: true
-            cross_cpu: arm64
-            cross_os: win32
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -135,19 +131,14 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      # The version comes from the lockfile rather than from the range in
-      # package.json. Native targets get sharp through `npm ci`, so they are
-      # already pinned; without this the cross targets re-resolve `^0.35.x` and a
-      # release published in between would put a different, untested sharp inside
-      # some of the VSIXs of the same version.
-      - name: Install cross-platform sharp binary
+      # Native targets get their sharp binary from `npm ci`. The two cross
+      # targets need one npm will not install, because it does not match the
+      # host's os/cpu — so it is taken straight out of the lockfile, tarball
+      # and sha512 alike. A hash that does not match fails the build, and
+      # nothing here re-resolves a range.
+      - name: Fetch cross-platform sharp binary
         if: matrix.cross == true
-        shell: bash
-        run: |
-          version=$(node -p "require('./package-lock.json').packages['node_modules/sharp'].version")
-          npm install --cpu=${{ matrix.cross_cpu }} --os=${{ matrix.cross_os }} "sharp@$version"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: node scripts/fetch-cross-sharp.mjs ${{ matrix.target }}
 
       - name: Build
         run: npm run bundle:prod

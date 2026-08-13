@@ -239,7 +239,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:unit": "vitest run test/image test/clipboard test/security test/config test/keyboard",
+    "test:unit": "vitest run test/image test/clipboard test/security test/config test/keyboard test/core",
     "test:integration": "vitest run test/integration/",
     "test:platform": "vitest run test/clipboard/providers/",
     "test:e2e": "npm run bundle && npm run compile:e2e && node ./test/e2e/out/runTests.js",
