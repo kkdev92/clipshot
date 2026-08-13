@@ -244,7 +244,17 @@ async function main() {
   const imgDir = join(projectRoot, 'node_modules', '@img');
   const stale = readdirSync(imgDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && entry.name.startsWith('sharp-'))
-    .filter((entry) => !packages.has(`@img/${entry.name}`));
+    .filter((entry) => !packages.has(`@img/${entry.name}`))
+    .filter((entry) => {
+      // Only what the lockfile says is built for a particular platform.
+      // `@img/sharp-wasm32` declares neither `os` nor `cpu`, because it is the
+      // runtime sharp falls back to when no native binary matches the host —
+      // and `verify-vsix.mjs` runs `require('sharp')` on the x64 runner that
+      // cross-builds for arm64, so removing it broke that check. Anything the
+      // lockfile does not describe is left alone rather than guessed at.
+      const locked = lock.packages[lockKey(`@img/${entry.name}`)];
+      return locked !== undefined && (locked.os !== undefined || locked.cpu !== undefined);
+    });
 
   for (const entry of stale) {
     const directory = join(imgDir, entry.name);
