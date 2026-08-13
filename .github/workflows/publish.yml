@@ -109,6 +109,14 @@ jobs:
   publish:
     needs: build
     runs-on: ubuntu-latest
+    # Publishing to the Marketplace waits for an approval. The environment also
+    # restricts what may deploy to it to `v*` tags, which is the ref every
+    # release this workflow has ever run on.
+    #
+    # `VSCE_PAT` is still a repository secret, so this gates *when* it is used,
+    # not who can reference it. Moving the secret onto this environment is the
+    # step that would do that, and needs the token value.
+    environment: marketplace-publish
     permissions:
       contents: read
       packages: read
