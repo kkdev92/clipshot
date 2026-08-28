@@ -21,9 +21,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already past 1.131; it has now caught up to 1.134.0, one release behind the
   current 1.135.
 
-- Dev dependencies: `vitest` and `@vitest/coverage-v8` 4.1.10 → 4.1.11.
+- **The cross-architecture `sharp` binary is taken from the lockfile**, tarball
+  and sha512 alike, rather than resolved by version at build time. `linux-arm64`
+  and `win32-arm64` need a binary npm will not install on the build host, and
+  this is the workflow that publishes — so a hash that does not match now fails
+  the build.
+
+- Dev dependencies: `vitest` and `@vitest/coverage-v8` 4.1.10 → 4.1.11, `eslint`
+  9.39.2 → 10.9.1 (with `@eslint/js`), `typescript-eslint` 8.66.0 → 8.68.0,
+  `mocha` 11.7.5 → 12.0.0-rc.6. `lint` also fails on warnings now.
 
 ### Fixed
+
+- **An undocumented environment override is gone.** `CLAUDE_IMG_EXECUTION_POLICY`
+  was read and interpolated, unquoted, into the command line that launches
+  PowerShell, so a value carrying a shell metacharacter would have run alongside
+  it. **This was not remotely exploitable** — setting it means already being able
+  to run code as the user — so it is listed as what it was: scaffold residue from
+  the first commit, named after something unrelated, with no setting, no
+  documentation and no caller. Its only real effect was an unrecorded way to
+  lower PowerShell's execution policy. The read is deleted rather than validated,
+  and `RemoteSigned` is now a named constant.
 
 - **The paste command no longer stays open until you close its notification.**
   VS Code resolves a notification's promise when the toast is *dismissed*, not
