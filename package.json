@@ -19,7 +19,7 @@
   },
   "engines": {
     "node": ">=22.12.0",
-    "vscode": "^1.125.0"
+    "vscode": "^1.134.0"
   },
   "categories": [
     "Formatters",
@@ -253,8 +253,8 @@
     "@kkdev92/vscode-ext-kit": "^3.0.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.20.1",
-    "@types/vscode": "~1.125.0",
-    "@vitest/coverage-v8": "^4.0.17",
+    "@types/vscode": "~1.134.0",
+    "@vitest/coverage-v8": "^4.1.11",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.28.2",

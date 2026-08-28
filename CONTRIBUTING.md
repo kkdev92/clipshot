@@ -12,7 +12,7 @@ Please be respectful and constructive in all interactions.
 
 - Node.js 22.12 or later (what CI builds on)
 - npm 10.x or later
-- VS Code 1.125.0 or later — the minimum the extension declares
+- VS Code 1.134.0 or later — the minimum the extension declares
 - Git
 
 ### Development Setup
