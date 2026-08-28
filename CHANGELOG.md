@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking: VS Code 1.134 or later is now required**, up from 1.125, in step
+  with `@types/vscode` moving to `~1.134.0`. The two have to move together —
+  `vsce` refuses to package an extension whose `@types/vscode` is newer than its
+  `engines.vscode`, which is what the grouped dependency update ran into:
+  `@types/vscode ~1.134.0 greater than engines.vscode ^1.125.0`. All six
+  per-target builds failed on it. The rule is right, because types above the
+  floor let code compile against an API the declared minimum does not have.
+
+  DefinitelyTyped had been stuck at 1.125.0 for months against a stable line
+  already past 1.131; it has now caught up to 1.134.0, one release behind the
+  current 1.135.
+
+- Dev dependencies: `vitest` and `@vitest/coverage-v8` 4.1.10 → 4.1.11.
+
 ### Fixed
 
 - **The paste command no longer stays open until you close its notification.**
