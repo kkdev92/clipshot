@@ -44,6 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   callers through the `./testing` subpath and never enters a bundle, and all
   105 `.d.ts` are identical, so there is no API change either.
 
+### Fixed
+
+- **The Marketplace filed this extension under Formatters and Snippets.** It
+  contributes neither: the manifest is one command, one keybinding and
+  seventeen settings, with no formatting provider and no snippets anywhere in
+  it. Browsing either category turned up an image paster. The categories are
+  now `AI` and `Other`.
+
 ## [0.4.0] - 2026-08-29
 
 ### Changed
