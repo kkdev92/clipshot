@@ -3,6 +3,14 @@
  *
  * Exercises activate()/deactivate() against the vscode mock suite from
  * @kkdev92/vscode-ext-kit/testing — no extension host required.
+ *
+ * Each test gets a fresh module instance. `defineExtension` is single-use, the
+ * way a real extension host uses it: one activation per session, and a second
+ * activation after deactivation is refused. `vi.resetModules()` plus a dynamic
+ * import per test is what "one session per test" looks like under Vitest — and
+ * because `vscode` and the paste-handler mock are re-instantiated with the
+ * extension, those are imported dynamically too, so assertions read the same
+ * instances the extension saw.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -13,13 +21,15 @@ vi.mock('../src/keyboard/paste-handler', () => ({
   getPasteHandler: vi.fn(),
 }));
 
-import * as vscode from 'vscode';
-import { activate, deactivate } from '../src/extension';
+import type * as vscodeTypes from 'vscode';
 import { COMMANDS, CONTEXT_KEYS, EXTENSION_NAME } from '../src/core/constants';
-import { getPasteHandler } from '../src/keyboard/paste-handler';
 import type { PasteResult } from '../src/core/types';
 
-function createContext(): vscode.ExtensionContext {
+let vscode: typeof import('vscode');
+let extension: typeof import('../src/extension');
+let pasteHandler: typeof import('../src/keyboard/paste-handler');
+
+function createContext(): vscodeTypes.ExtensionContext {
   return createMockExtensionContext(vi);
 }
 
@@ -31,7 +41,7 @@ async function activateAndGetPasteCommand(): Promise<() => Promise<void>> {
   // Not awaiting it leaves activation racing the assertions, and racing the
   // `deactivate()` in afterEach — which rejects the in-flight start with
   // `application-stopping`.
-  await activate(createContext());
+  await extension.activate(createContext());
 
   const call = vi
     .mocked(vscode.commands.registerCommand)
@@ -43,7 +53,7 @@ async function activateAndGetPasteCommand(): Promise<() => Promise<void>> {
 }
 
 function stubPasteResult(result: PasteResult): void {
-  vi.mocked(getPasteHandler).mockReturnValue({
+  vi.mocked(pasteHandler.getPasteHandler).mockReturnValue({
     handlePaste: vi.fn().mockResolvedValue(result),
   } as never);
 }
@@ -56,18 +66,23 @@ function notifiedMessages(mock: unknown): string[] {
 }
 
 describe('extension', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  beforeEach(async () => {
+    // A fresh module registry per test: a new application, a new vscode mock
+    // and a new paste-handler mock, all from the same instantiation.
+    vi.resetModules();
+    vscode = await import('vscode');
+    extension = await import('../src/extension');
+    pasteHandler = await import('../src/keyboard/paste-handler');
   });
 
   afterEach(async () => {
-    await deactivate();
+    await extension.deactivate();
     vi.clearAllMocks();
   });
 
   describe('activate', () => {
     it('registers the paste image command', async () => {
-      await activate(createContext());
+      await extension.activate(createContext());
 
       expect(vscode.commands.registerCommand).toHaveBeenCalledWith(
         COMMANDS.PASTE_IMAGE,
@@ -76,7 +91,7 @@ describe('extension', () => {
     });
 
     it('logs into a LogOutputChannel named after the application', async () => {
-      await activate(createContext());
+      await extension.activate(createContext());
 
       // This used to be a plain channel, so that `clipshot.logLevel` was the
       // only thing filtering it. The framework logs into a LogOutputChannel
@@ -91,7 +106,7 @@ describe('extension', () => {
     });
 
     it('publishes the enabled context key', async () => {
-      await activate(createContext());
+      await extension.activate(createContext());
 
       expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
         'setContext',
@@ -114,7 +129,7 @@ describe('extension', () => {
       );
 
       // Resolves rather than rejects: the failure is logged and swallowed.
-      await expect(activate(createContext())).resolves.toBeUndefined();
+      await expect(extension.activate(createContext())).resolves.toBeUndefined();
       expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
         'setContext',
         CONTEXT_KEYS.ENABLED,
@@ -125,19 +140,19 @@ describe('extension', () => {
     it('registers disposables on the extension context', async () => {
       const context = createContext();
 
-      await activate(context);
+      await extension.activate(context);
 
       expect(context.subscriptions.length).toBeGreaterThan(0);
     });
 
     it('subscribes to configuration changes', async () => {
-      await activate(createContext());
+      await extension.activate(createContext());
 
       expect(vscode.workspace.onDidChangeConfiguration).toHaveBeenCalled();
     });
 
     it('refreshes the context key when configuration changes', async () => {
-      await activate(createContext());
+      await extension.activate(createContext());
 
       // Two listeners are registered: the logger's level sync and the
       // config schema's section watcher. Fire both.
@@ -147,7 +162,7 @@ describe('extension', () => {
       expect(listeners.length).toBeGreaterThan(0);
 
       vi.mocked(vscode.commands.executeCommand).mockClear();
-      const event = { affectsConfiguration: () => true } as vscode.ConfigurationChangeEvent;
+      const event = { affectsConfiguration: () => true } as vscodeTypes.ConfigurationChangeEvent;
       for (const listener of listeners) {
         listener(event);
       }
@@ -186,9 +201,7 @@ describe('extension', () => {
 
       await (await activateAndGetPasteCommand())();
 
-      expect(notifiedMessages(vscode.window.showInformationMessage)[0]).toContain(
-        'Path copied'
-      );
+      expect(notifiedMessages(vscode.window.showInformationMessage)[0]).toContain('Path copied');
     });
 
     it('surfaces a failure as an error notification', async () => {
@@ -266,13 +279,13 @@ describe('extension', () => {
 
   describe('deactivate', () => {
     it('completes without throwing when the extension was activated', async () => {
-      await activate(createContext());
+      await extension.activate(createContext());
 
-      await expect(deactivate()).resolves.toBeUndefined();
+      await expect(extension.deactivate()).resolves.toBeUndefined();
     });
 
     it('completes without throwing when activate was never called', async () => {
-      await expect(deactivate()).resolves.toBeUndefined();
+      await expect(extension.deactivate()).resolves.toBeUndefined();
     });
   });
 });
