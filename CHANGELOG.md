@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-07
+
+**Breaking: VS Code 1.136 or later is now required**, up from 1.134, in step with
+`@types/vscode` moving to `~1.136.0`. The two have to move together — `vsce`
+refuses to package an extension whose `@types/vscode` outruns its
+`engines.vscode`, and raising only the types would let code compile against an
+API the declared floor does not have.
+
+The floor is inherited: `@kkdev92/vscode-ext-kit` 5.0.0 raised its own
+`engines.vscode` to `^1.136.0`, and every extension built on it declares at least
+the same. Nothing this extension does changed — pasting, saving and the image
+handling behave exactly as in 0.4.x. Installations on an older VS Code keep
+0.4.x and stop receiving updates.
+
+### Changed
+
+- **Breaking:** `engines.vscode` raised from `^1.134.0` to `^1.136.0`, with
+  `@types/vscode` at `~1.136.0` to match.
+- `@kkdev92/vscode-ext-kit` `^4.1.0` → `^5.0.0`. The only change in that major is
+  the VS Code floor; the API it exposes is byte-for-byte what 4.1.1 exposed.
+
 ### Fixed
 
 - **The Marketplace version badge could render as a broken image.** The host
@@ -325,7 +346,8 @@ Initial release.
   (PNG/JPEG/WebP) and quality.
 - Path validation and sanitization to keep saved files inside the workspace.
 
-[Unreleased]: https://github.com/kkdev92/clipshot/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/kkdev92/clipshot/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/kkdev92/clipshot/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/kkdev92/clipshot/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/kkdev92/clipshot/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/kkdev92/clipshot/compare/v0.3.1...v0.3.2
