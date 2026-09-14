@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-14
+
+**`Ctrl+Shift+V` works in the integrated terminal again.** It had started doing
+nothing there — no error, no notification, no log entry — while continuing to
+work in every editor.
+
+A key press in the integrated terminal belongs to the program running in it.
+VS Code intercepts it only when the command it resolves to is listed in
+`terminal.integrated.commandsToSkipShell`, and `clipshot.pasteImage` was not on
+that list. For a long time it did not need to be: the terminal had no meaning for
+`Ctrl+Shift+V`, so the key press fell through to VS Code's keyboard shortcut
+system and the paste ran.
+
+The kitty keyboard protocol changes that. VS Code's terminal supports it and
+leaves it dormant until a program running in the terminal asks for it, and an
+increasing number of terminal-based tools now ask. Once it is enabled the
+terminal reports `ctrl+shift+letter` combinations itself rather than letting them
+through, so the key press stops before any extension sees it — and whether the
+shortcut worked came down to which program the terminal happened to be running.
+
+ClipShot now registers the command itself, so the shortcut no longer depends on
+that.
+
+### Fixed
+
+- **`Ctrl+Shift+V` reaches ClipShot while the integrated terminal has focus**,
+  whatever is running in it.
+
+### Added
+
+- **`clipshot.pasteImage` is registered with
+  `terminal.integrated.commandsToSkipShell` on activation.** The entry is
+  appended to your User settings once, and ClipShot says so when it does. Your
+  existing entries are preserved, nothing is ever removed, and an explicit
+  `-clipshot.pasteImage` is honoured as the opt-out it is.
+- **`clipshot.terminal.registerShortcut`** (default `true`) turns that off, for
+  anyone who would rather manage the list themselves.
+- **`ClipShot: Enable Shortcut in Integrated Terminal`**, a command that performs
+  the same registration on request and reports what it found.
+
 ## [0.5.0] - 2026-09-07
 
 **Breaking: VS Code 1.136 or later is now required**, up from 1.134, in step with
@@ -346,7 +386,8 @@ Initial release.
   (PNG/JPEG/WebP) and quality.
 - Path validation and sanitization to keep saved files inside the workspace.
 
-[Unreleased]: https://github.com/kkdev92/clipshot/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/kkdev92/clipshot/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/kkdev92/clipshot/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/kkdev92/clipshot/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/kkdev92/clipshot/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/kkdev92/clipshot/compare/v0.3.2...v0.4.0

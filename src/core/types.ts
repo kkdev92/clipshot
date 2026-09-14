@@ -124,6 +124,9 @@ export interface ExtensionConfig {
   notifications: {
     level: NotificationLevel;
   };
+  terminal: {
+    registerShortcut: boolean;
+  };
 }
 
 /**

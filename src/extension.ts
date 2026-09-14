@@ -2,8 +2,8 @@
  * Extension entry point.
  *
  * The whole of what this extension contributes is declared here as one module
- * — a command, a settings block and two hosted services — and compiled into a
- * plan before VS Code is touched. `defineExtension` runs it; nothing in this
+ * — two commands, a settings block and three hosted services — and compiled
+ * into a plan before VS Code is touched. `defineExtension` runs it; nothing in this
  * file registers or disposes anything by hand.
  *
  * The work itself is unchanged. Clipboard access, image processing and path
@@ -24,6 +24,7 @@ import { validateConfiguration } from './config/validators';
 import { COMMANDS, CONTEXT_KEYS, EXTENSION_NAME } from './core/constants';
 import { disposeGlobalClipboardManager } from './clipboard/clipboard-manager';
 import { getPasteHandler } from './keyboard/paste-handler';
+import { describeSkipShellOutcome, ensureSkipShellEntry } from './terminal/skip-shell';
 import { disposeGlobalTempFileManager } from './security/temp-file-manager';
 import type { ExtensionConfig, LogLevel, Logger, NotificationLevel } from './core/types';
 
@@ -35,6 +36,18 @@ import type { ExtensionConfig, LogLevel, Logger, NotificationLevel } from './cor
  */
 export const PasteImage = defineCommandContract<readonly [], void>({
   id: COMMANDS.PASTE_IMAGE,
+});
+
+/**
+ * The terminal registration, as something a user can run.
+ *
+ * It is the same work activation does, exposed because the automatic pass is
+ * skippable: a user who turned `clipshot.terminal.registerShortcut` off, or
+ * whose settings could not be written the first time, needs a way to ask for it
+ * without hunting through settings.json.
+ */
+export const EnableInTerminal = defineCommandContract<readonly [], void>({
+  id: COMMANDS.ENABLE_IN_TERMINAL,
 });
 
 /** Severity order, for comparing against the configured floor. */
@@ -211,6 +224,25 @@ export const clipshot = defineModule('clipshot', (module): undefined => {
     },
   });
 
+  module.commands.handle(EnableInTerminal, {
+    inject: { settings: Settings.token },
+    execute: async (context: OperationContext, _args, { settings }): Promise<void> => {
+      const config = loadConfiguration(settings);
+      const logger = filtered(context.logger, config.logLevel);
+      const outcome = await ensureSkipShellEntry(COMMANDS.PASTE_IMAGE, logger);
+      const message = describeSkipShellOutcome(outcome);
+      // Run by hand, so the result is reported whatever it is and whatever the
+      // notification level says: someone who asked the question is owed the
+      // answer, including the two answers that are not "done".
+      announce(
+        outcome === 'failed' || outcome === 'opted-out'
+          ? context.notify.warn(message)
+          : context.notify.info(message),
+        logger
+      );
+    },
+  });
+
   // Configuration is read where it is used, so nothing here caches it. What
   // this service exists for is the two effects a change has outside a paste:
   // the context key a `when` clause reads, and the warnings.
@@ -239,6 +271,53 @@ export const clipshot = defineModule('clipshot', (module): undefined => {
     stop: () => {
       subscription?.dispose();
       subscription = undefined;
+    },
+  });
+
+  // Ctrl+Shift+V does not reach an extension while the integrated terminal has
+  // focus unless the command is on VS Code's skip list, and VS Code has no
+  // contribution point for that list — the reasoning, and why this only started
+  // mattering, is in src/terminal/skip-shell.ts. Activation is where the write
+  // belongs: it is the last moment before a user reaches for the shortcut.
+  let terminalSubscription: { dispose(): void } | undefined;
+  module.hostedServices.add({
+    id: 'clipshot.terminalShortcut',
+    inject: { settings: Settings.token },
+    start: async (context, { settings }) => {
+      // Settled once the list has an answer in it. 'failed' is the one outcome
+      // left unsettled: a settings.json that could not be written now may be
+      // writable later, and a change event is a reasonable moment to retry.
+      let settled = false;
+      const apply = async (): Promise<void> => {
+        const config = loadConfiguration(settings);
+        if (settled || !config.terminal.registerShortcut) {
+          return;
+        }
+        const logger = filtered(context.logger, config.logLevel);
+        const outcome = await ensureSkipShellEntry(COMMANDS.PASTE_IMAGE, logger);
+        settled = outcome !== 'failed';
+        if (outcome === 'added' && wants(config.notifications.level, 'success')) {
+          // A hosted service carries a logger and no UI — deliberately, since
+          // VS Code may be shutting down when one stops. Writing to a user's
+          // settings without telling them is the worse trade, so this is the
+          // second and last place the extension reaches for a VS Code API by
+          // hand. It fires once in the life of an installation.
+          announce(
+            Promise.resolve(vscode.window.showInformationMessage(describeSkipShellOutcome(outcome))),
+            logger
+          );
+        }
+      };
+      await apply();
+      // Turning the setting on is a request, not a preference to note for next
+      // time, so it is acted on when it happens rather than at the next start.
+      terminalSubscription = settings.onDidChange(() => {
+        void apply();
+      });
+    },
+    stop: () => {
+      terminalSubscription?.dispose();
+      terminalSubscription = undefined;
     },
   });
 

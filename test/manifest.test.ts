@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { assertManifestMatches } from '@kkdev92/vscode-ext-kit/testing';
 import { describe, it } from 'vitest';
 
-import { PasteImage } from '../src/extension';
+import { EnableInTerminal, PasteImage } from '../src/extension';
 import { Settings } from '../src/config/schema';
 
 const manifest: unknown = JSON.parse(
@@ -29,7 +29,7 @@ describe('package.json', () => {
     // here as it is written, rather than normalised away first.
     assertManifestMatches(manifest, {
       settings: [Settings],
-      commands: [PasteImage],
+      commands: [PasteImage, EnableInTerminal],
     });
   });
 });

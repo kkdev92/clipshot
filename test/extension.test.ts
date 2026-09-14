@@ -58,6 +58,30 @@ function stubPasteResult(result: PasteResult): void {
   } as never);
 }
 
+/**
+ * Answers for `terminal.integrated.commandsToSkipShell`.
+ *
+ * Activation puts the paste command on that list, which without a stub means
+ * every test here writes settings and raises a toast about it. Saying the entry
+ * is already there is both quiet and the state an installed extension is in
+ * after its first run; the tests that care about the write pass their own list.
+ */
+function stubTerminalSkipList(entries: readonly string[] = [COMMANDS.PASTE_IMAGE]): {
+  update: ReturnType<typeof vi.fn>;
+} {
+  const update = vi.fn().mockResolvedValue(undefined);
+  const forOtherSections = vi.mocked(vscode.workspace.getConfiguration).getMockImplementation();
+  vi.mocked(vscode.workspace.getConfiguration).mockImplementation(((section?: string) =>
+    section === 'terminal.integrated'
+      ? {
+          get: vi.fn().mockReturnValue([...entries]),
+          inspect: vi.fn().mockReturnValue({ globalValue: [...entries] }),
+          update,
+        }
+      : forOtherSections?.(section)) as never);
+  return { update };
+}
+
 /** Messages passed to a notification mock, ignoring the options argument. */
 function notifiedMessages(mock: unknown): string[] {
   return vi
@@ -73,6 +97,7 @@ describe('extension', () => {
     vscode = await import('vscode');
     extension = await import('../src/extension');
     pasteHandler = await import('../src/keyboard/paste-handler');
+    stubTerminalSkipList();
   });
 
   afterEach(async () => {
@@ -171,6 +196,64 @@ describe('extension', () => {
         'setContext',
         CONTEXT_KEYS.ENABLED,
         true
+      );
+    });
+  });
+
+  describe('terminal shortcut', () => {
+    it('puts the paste command on the skip list when it is not there', async () => {
+      const { update } = stubTerminalSkipList([]);
+
+      await extension.activate(createContext());
+
+      expect(update).toHaveBeenCalledWith(
+        'commandsToSkipShell',
+        [COMMANDS.PASTE_IMAGE],
+        vscode.ConfigurationTarget.Global
+      );
+      // A write to someone's settings is not something to do quietly.
+      expect(notifiedMessages(vscode.window.showInformationMessage)[0]).toContain(
+        'commandsToSkipShell'
+      );
+    });
+
+    it('writes nothing, and says nothing, when the entry is already there', async () => {
+      const { update } = stubTerminalSkipList([COMMANDS.PASTE_IMAGE]);
+
+      await extension.activate(createContext());
+
+      expect(update).not.toHaveBeenCalled();
+      expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+    });
+
+    it('leaves an explicit opt-out alone', async () => {
+      const { update } = stubTerminalSkipList([`-${COMMANDS.PASTE_IMAGE}`]);
+
+      await extension.activate(createContext());
+
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('registers the command that asks for it by hand', async () => {
+      await extension.activate(createContext());
+
+      expect(vscode.commands.registerCommand).toHaveBeenCalledWith(
+        COMMANDS.ENABLE_IN_TERMINAL,
+        expect.any(Function)
+      );
+    });
+
+    it('reports the outcome when run by hand, even with nothing to do', async () => {
+      stubTerminalSkipList([COMMANDS.PASTE_IMAGE]);
+      await extension.activate(createContext());
+
+      const call = vi
+        .mocked(vscode.commands.registerCommand)
+        .mock.calls.find(([id]) => id === COMMANDS.ENABLE_IN_TERMINAL);
+      await (call?.[1] as () => Promise<void>)();
+
+      expect(notifiedMessages(vscode.window.showInformationMessage)[0]).toContain(
+        'commandsToSkipShell'
       );
     });
   });
