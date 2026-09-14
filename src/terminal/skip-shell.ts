@@ -15,8 +15,8 @@
  * xterm.js encodes chords it previously ignored — `ctrl+shift+letter` is named
  * in the protocol as one of the combinations it disambiguates — and consumes
  * the event where it is. Nothing bubbles, the keybinding never resolves, and
- * the paste goes quiet with no error to show for it. Which program is running
- * decides whether the shortcut works, which is no way to ship a keybinding.
+ * the paste goes quiet with no error to show for it. Whether the shortcut works
+ * then depends on which program the terminal happens to be running.
  *
  * The skip list is the only lever. VS Code has no contribution point for it, and
  * the set is rebuilt from the setting alone, so being on it means writing to it.

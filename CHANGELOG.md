@@ -13,30 +13,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 nothing there — no error, no notification, no log entry — while continuing to
 work in every editor.
 
-The shortcut had always reached the extension by luck rather than by right. A
-key press in the integrated terminal belongs to the program running in it, and
-VS Code only intercepts the ones whose command is listed in
-`terminal.integrated.commandsToSkipShell`. `clipshot.pasteImage` was not on that
-list, and for a long time it did not need to be: the terminal had no meaning for
+A key press in the integrated terminal belongs to the program running in it.
+VS Code intercepts it only when the command it resolves to is listed in
+`terminal.integrated.commandsToSkipShell`, and `clipshot.pasteImage` was not on
+that list. For a long time it did not need to be: the terminal had no meaning for
 `Ctrl+Shift+V`, so the key press fell through to VS Code's keyboard shortcut
 system and the paste ran.
 
-The kitty keyboard protocol ends that. VS Code's terminal supports it and leaves
-it dormant until a program running in the terminal asks for it — and an
-increasing number of terminal-based tools now ask. Once enabled, the terminal
-reports `ctrl+shift+letter` combinations itself instead of letting them through,
-so the key press stops before it reaches any extension. Which program happened
-to be running decided whether the shortcut worked.
+The kitty keyboard protocol changes that. VS Code's terminal supports it and
+leaves it dormant until a program running in the terminal asks for it, and an
+increasing number of terminal-based tools now ask. Once it is enabled the
+terminal reports `ctrl+shift+letter` combinations itself rather than letting them
+through, so the key press stops before any extension sees it — and whether the
+shortcut worked came down to which program the terminal happened to be running.
 
-ClipShot now puts itself on that list, so the shortcut no longer depends on it.
+ClipShot now registers the command itself, so the shortcut no longer depends on
+that.
+
+### Fixed
+
+- **`Ctrl+Shift+V` reaches ClipShot while the integrated terminal has focus**,
+  whatever is running in it.
 
 ### Added
 
 - **`clipshot.pasteImage` is registered with
-  `terminal.integrated.commandsToSkipShell` on activation**, which is what makes
-  `Ctrl+Shift+V` reach ClipShot while the integrated terminal has focus. The
-  entry is appended to your User settings once, and ClipShot says so when it does
-  it. Existing entries are preserved, nothing is ever removed, and an explicit
+  `terminal.integrated.commandsToSkipShell` on activation.** The entry is
+  appended to your User settings once, and ClipShot says so when it does. Your
+  existing entries are preserved, nothing is ever removed, and an explicit
   `-clipshot.pasteImage` is honoured as the opt-out it is.
 - **`clipshot.terminal.registerShortcut`** (default `true`) turns that off, for
   anyone who would rather manage the list themselves.
