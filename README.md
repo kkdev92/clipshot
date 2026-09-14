@@ -265,7 +265,7 @@ For the full policy and for vulnerability reporting, see [SECURITY.md](SECURITY.
 
 ## Platform Requirements
 
-- **VS Code 1.136 or later**
+- **VS Code 1.137 or later**
 - Windows, macOS or Linux, on x64 or ARM64
 
 | Platform | Needs |
@@ -282,9 +282,9 @@ instead of all six. VS Code picks the right one for you.
 CI runs the test suite on Windows, macOS and Linux, and builds and verifies all
 six.
 
-> **Upgrading?** The minimum VS Code version is now 1.136 — it was 1.134 from
-> 0.4.0, 1.125 from 0.3.0, and 1.96 before that. Older installations keep the
-> version they have and stop receiving updates.
+> **Upgrading?** The minimum VS Code version is now 1.137 — it was 1.136 from
+> 0.6.0, 1.134 from 0.4.0, 1.125 from 0.3.0, and 1.96 before that. Older
+> installations keep the version they have and stop receiving updates.
 
 ---
 
