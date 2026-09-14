@@ -17,6 +17,7 @@ export const EXTENSION_NAME = 'ClipShot';
  */
 export const COMMANDS = {
   PASTE_IMAGE: `${EXTENSION_ID}.pasteImage`,
+  ENABLE_IN_TERMINAL: `${EXTENSION_ID}.enableInTerminal`,
 } as const;
 
 /**
@@ -52,6 +53,7 @@ export const DEFAULTS = {
   ALT_LITERAL: 'image',
   MAX_FILE_SIZE_MB: 10,
   NOTIFICATION_LEVEL: 'all' as const,
+  TERMINAL_REGISTER_SHORTCUT: true,
 } as const;
 
 /**

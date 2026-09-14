@@ -65,6 +65,9 @@ export const Settings = defineSettings({
       values: ['all', 'errors', 'none'],
       default: DEFAULTS.NOTIFICATION_LEVEL,
     }),
+    'terminal.registerShortcut': setting.boolean({
+      default: DEFAULTS.TERMINAL_REGISTER_SHORTCUT,
+    }),
   },
 });
 
@@ -109,6 +112,7 @@ export function loadConfiguration(settings: {
     'insert.altLiteral': string;
     'limits.maxFileSizeMB': number;
     'notifications.level': ExtensionConfig['notifications']['level'];
+    'terminal.registerShortcut': boolean;
   };
 
   const raw: ExtensionConfig = {
@@ -140,6 +144,9 @@ export function loadConfiguration(settings: {
     },
     notifications: {
       level: v['notifications.level'],
+    },
+    terminal: {
+      registerShortcut: v['terminal.registerShortcut'],
     },
   };
 

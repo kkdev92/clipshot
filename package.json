@@ -2,7 +2,7 @@
   "name": "clipshot",
   "displayName": "ClipShot",
   "description": "Paste clipboard images with automatic file saving - perfect for AI chat and documentation",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "kkdev92",
   "author": {
     "name": "kkdev92",
@@ -47,6 +47,10 @@
       {
         "command": "clipshot.pasteImage",
         "title": "ClipShot: Paste Image"
+      },
+      {
+        "command": "clipshot.enableInTerminal",
+        "title": "ClipShot: Enable Shortcut in Integrated Terminal"
       }
     ],
     "keybindings": [
@@ -214,6 +218,11 @@
             "none"
           ],
           "description": "Notification level"
+        },
+        "clipshot.terminal.registerShortcut": {
+          "type": "boolean",
+          "default": true,
+          "description": "Let Ctrl+Shift+V reach ClipShot while the integrated terminal has focus, by adding clipshot.pasteImage to terminal.integrated.commandsToSkipShell in your User settings. Without that entry the terminal keeps the key press and nothing happens. ClipShot appends the entry once and never removes it; turn this off to leave your settings untouched."
         }
       }
     }
@@ -238,7 +247,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:unit": "vitest run test/image test/clipboard test/security test/config test/keyboard test/core",
+    "test:unit": "vitest run test/image test/clipboard test/security test/config test/keyboard test/core test/terminal",
     "test:integration": "vitest run test/integration/",
     "test:platform": "vitest run test/clipboard/providers/",
     "test:e2e": "npm run bundle && npm run compile:e2e && node ./test/e2e/out/runTests.js",

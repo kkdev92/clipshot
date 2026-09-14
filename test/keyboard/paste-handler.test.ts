@@ -56,6 +56,9 @@ function createMockConfig(overrides: Partial<ExtensionConfig> = {}): ExtensionCo
     notifications: {
       level: 'all',
     },
+    terminal: {
+      registerShortcut: true,
+    },
     ...overrides,
   };
 }
