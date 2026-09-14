@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-14
+
+**Breaking: VS Code 1.137 or later is now required**, up from 1.136, in step with
+`@types/vscode` moving to `~1.137.0`. The two have to move together — `vsce`
+refuses to package an extension whose `@types/vscode` outruns its
+`engines.vscode`, and raising only the types would let code compile against an
+API the declared floor does not have.
+
+The floor is inherited: `@kkdev92/vscode-ext-kit` 6.0.0 raised its own
+`engines.vscode` to `^1.137.0`, and every extension built on it declares at least
+the same. Nothing this extension does changed — no command, setting, view or
+behaviour is different from 0.6.x. Installations on an older VS Code keep 0.6.x
+and stop receiving updates.
+
+### Changed
+
+- **Breaking:** `engines.vscode` raised from `^1.136.0` to `^1.137.0`, with
+  `@types/vscode` at `~1.137.0` to match.
+- `@kkdev92/vscode-ext-kit` `^5.0.0` → `^6.0.0`. The only change in that major is
+  the VS Code floor; the API it exposes is byte-for-byte what 5.0.0 exposed.
+
 ## [0.6.0] - 2026-09-14
 
 **`Ctrl+Shift+V` works in the integrated terminal again.** It had started doing
@@ -386,7 +407,7 @@ Initial release.
   (PNG/JPEG/WebP) and quality.
 - Path validation and sanitization to keep saved files inside the workspace.
 
-[Unreleased]: https://github.com/kkdev92/clipshot/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/kkdev92/clipshot/compare/v0.7.0...HEAD
 [0.6.0]: https://github.com/kkdev92/clipshot/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/kkdev92/clipshot/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/kkdev92/clipshot/compare/v0.4.0...v0.4.1
