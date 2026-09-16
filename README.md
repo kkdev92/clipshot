@@ -283,7 +283,7 @@ CI runs the test suite on Windows, macOS and Linux, and builds and verifies all
 six.
 
 > **Upgrading?** The minimum VS Code version is now 1.137 — it was 1.136 from
-> 0.6.0, 1.134 from 0.4.0, 1.125 from 0.3.0, and 1.96 before that. Older
+> 0.5.0, 1.134 from 0.4.0, 1.125 from 0.3.0, and 1.96 before that. Older
 > installations keep the version they have and stop receiving updates.
 
 ---
