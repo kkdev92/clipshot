@@ -39,7 +39,7 @@ Images are processed on your machine and are never uploaded anywhere.
 
 - **One Keystroke**: `Ctrl+Shift+V` (`Cmd+Shift+V` on macOS) saves the clipboard image and inserts a path at the cursor
 - **Non-Intrusive**: A dedicated shortcut, so ordinary paste keeps working exactly as it did
-- **Works in the Integrated Terminal**: The shortcut reaches ClipShot even when a terminal has focus, whatever is running in it
+- **Works in the Integrated Terminal**: With a terminal focused, the path is typed straight into it — ready for a CLI that takes an image path. Nothing is executed
 - **Format Aware**: Markdown gets `![alt](path)`, HTML gets `<img …>`, everything else gets the bare path
 - **Resizing**: Fit images within bounds, or use the `ai-optimized` preset to cut the tokens an image costs in a chat
 - **Output Formats**: PNG, JPEG or WebP, with quality settings for the lossy two
@@ -114,8 +114,23 @@ Set `clipshot.insert.format` to `path`, `markdown` or `html` to pin one instead.
 `clipshot.insert.altSource` decides what the alt text says: the file name, or
 the fixed string in `clipshot.insert.altLiteral`.
 
-If no editor has focus, the path goes to the clipboard instead and the
-notification says so — the image is still saved.
+### Where the Path Goes
+
+`Ctrl+Shift+V` puts the path wherever you pressed it:
+
+| You pressed it in | What happens |
+| --- | --- |
+| An editor | The path is inserted at the cursor, formatted for that file |
+| The integrated terminal | The path is typed into the terminal. No newline is sent, so nothing runs until you press Enter |
+| Anywhere else | The path goes to the clipboard and the notification says so — press `Ctrl+V` |
+
+In a terminal there is no file type to read, so `auto` produces the bare path
+rather than Markdown or HTML. Pin `clipshot.insert.format` if you want a
+specific one there too. A path containing a space arrives quoted.
+
+Set `clipshot.terminal.target` to `clipboard` if you would rather ClipShot did
+not write into whatever is running in your terminal; the path goes to the
+clipboard there as well. The image is saved either way.
 
 ### File Name Pattern Tokens
 
@@ -203,6 +218,7 @@ becomes token cost.
 | `clipshot.limits.maxFileSizeMB` | `10` | Largest image to save, 1–100 MB |
 | `clipshot.notifications.level` | `all` | `all` / `errors` / `none` |
 | `clipshot.terminal.registerShortcut` | `true` | Add `clipshot.pasteImage` to `terminal.integrated.commandsToSkipShell` so `Ctrl+Shift+V` reaches ClipShot in the integrated terminal — see [Troubleshooting](#troubleshooting) |
+| `clipshot.terminal.target` | `terminal` | Where the path goes with a terminal focused: `terminal` types it in, `clipboard` leaves it for `Ctrl+V` |
 
 A value outside its documented range is clamped rather than rejected: a
 `jpegQuality` of `200` becomes `100`, not the default. The output channel says
@@ -293,7 +309,8 @@ six.
 ### Any Platform
 
 - **"No workspace folder open"**: ClipShot saves into the workspace, so it needs one. Open a folder and try again
-- **Path not inserted, but the image was saved**: There was no editor focused. The path was copied to the clipboard instead — press `Ctrl+V`
+- **Path not inserted, but the image was saved**: Nothing had focus that ClipShot could write to. The path was copied to the clipboard instead — press `Ctrl+V`
+- **The path went into an editor instead of the terminal**: The routing depends on the `terminalFocus` keybinding ClipShot contributes. If you have rebound `Ctrl+Shift+V` in your own `keybindings.json`, bind it to `clipshot.pasteImage` with `"when": "terminalFocus"` and `"args": { "surface": "terminal" }` for the terminal case, and leave a second entry without a `when` for editors
 - **Images are not being resized**: Check `clipshot.resize.mode` is `fit`, then check the output channel — if the bundled `sharp` binary failed to load, resizing is skipped and the reason is logged
 - **`Ctrl+Shift+V` does nothing while the integrated terminal has focus**: A key press in the terminal belongs to the program running there unless the command is on `terminal.integrated.commandsToSkipShell`. ClipShot adds `clipshot.pasteImage` to that list the first time it activates. If the entry is not there — `clipshot.terminal.registerShortcut` is off, or the write did not go through — run **ClipShot: Enable Shortcut in Integrated Terminal** from the Command Palette, which reports what it found. An entry reading `-clipshot.pasteImage` is read as a deliberate opt-out and left alone
 - **Need more detail in the logs**: Open **View → Output → ClipShot**, then set the level in the panel's own dropdown or via `Developer: Set Log Level`. `clipshot.logLevel` is a *floor* on top of that: it can make the log quieter, but it cannot turn on output that VS Code's level is already filtering out

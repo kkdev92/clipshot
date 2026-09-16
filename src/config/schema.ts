@@ -68,6 +68,10 @@ export const Settings = defineSettings({
     'terminal.registerShortcut': setting.boolean({
       default: DEFAULTS.TERMINAL_REGISTER_SHORTCUT,
     }),
+    'terminal.target': setting.enum({
+      values: ['terminal', 'clipboard'],
+      default: DEFAULTS.TERMINAL_TARGET,
+    }),
   },
 });
 
@@ -113,6 +117,7 @@ export function loadConfiguration(settings: {
     'limits.maxFileSizeMB': number;
     'notifications.level': ExtensionConfig['notifications']['level'];
     'terminal.registerShortcut': boolean;
+    'terminal.target': ExtensionConfig['terminal']['target'];
   };
 
   const raw: ExtensionConfig = {
@@ -147,6 +152,7 @@ export function loadConfiguration(settings: {
     },
     terminal: {
       registerShortcut: v['terminal.registerShortcut'],
+      target: v['terminal.target'],
     },
   };
 

@@ -17,6 +17,7 @@ import {
   defineExtension,
   defineModule,
   type OperationContext,
+  type Validator,
 } from '@kkdev92/vscode-ext-kit';
 
 import { Settings, loadConfiguration } from './config/schema';
@@ -26,17 +27,54 @@ import { disposeGlobalClipboardManager } from './clipboard/clipboard-manager';
 import { getPasteHandler } from './keyboard/paste-handler';
 import { describeSkipShellOutcome, ensureSkipShellEntry } from './terminal/skip-shell';
 import { disposeGlobalTempFileManager } from './security/temp-file-manager';
-import type { ExtensionConfig, LogLevel, Logger, NotificationLevel } from './core/types';
+import type {
+  ExtensionConfig,
+  LogLevel,
+  Logger,
+  NotificationLevel,
+  PasteDestination,
+  PasteSurface,
+} from './core/types';
+
+/** The one thing a keybinding may tell the paste command. */
+export interface PasteImageArgs {
+  /** Which pane the shortcut was pressed in. */
+  readonly surface: PasteSurface;
+}
+
+/**
+ * Normalises whatever a caller passed into a surface.
+ *
+ * Never fails. The framework turns a rejected argument into a thrown command,
+ * and there is nothing here worth failing a paste over: the manifest supplies
+ * `{ surface: 'terminal' }` from one keybinding, the Command Palette supplies
+ * nothing, and anything else is a caller this extension did not write. All
+ * three want the same answer — the editor unless the terminal was named.
+ */
+const pasteImageArgs: Validator<readonly [PasteImageArgs]> = {
+  validate: (value: unknown) => {
+    const first = value instanceof Array ? (value as readonly unknown[])[0] : undefined;
+    const named =
+      typeof first === 'object' && first !== null
+        ? (first as { readonly surface?: unknown }).surface
+        : undefined;
+    return { ok: true, value: [{ surface: named === 'terminal' ? 'terminal' : 'editor' }] };
+  },
+};
 
 /**
  * The paste command.
  *
- * No arguments and no result: it is a keybinding and a palette entry, and what
- * it produces is a file and an edit rather than a value a caller reads.
+ * The result is a file and an edit rather than a value a caller reads, so there
+ * is none. The argument exists because VS Code has no runtime API for focus:
+ * `window.activeTextEditor` names the last edited editor whether or not it has
+ * focus, so "is the terminal focused?" can only be answered by the keybinding's
+ * own `when` clause, which answers it by passing this.
  */
-export const PasteImage = defineCommandContract<readonly [], void>({
-  id: COMMANDS.PASTE_IMAGE,
-});
+export const PasteImage = defineCommandContract<readonly [PasteImageArgs], void>(
+  { id: COMMANDS.PASTE_IMAGE },
+  { args: pasteImageArgs }
+);
 
 /**
  * The terminal registration, as something a user can run.
@@ -149,13 +187,17 @@ function wants(level: NotificationLevel, kind: 'success' | 'error'): boolean {
 /** What to say after a paste that worked. */
 function describeSuccess(result: {
   processedImage: { relativePath: string; fileSize: number; dimensions?: { width: number; height: number } | undefined };
-  copiedToClipboard?: boolean | undefined;
+  destination?: PasteDestination | undefined;
 }): string {
   const image = result.processedImage;
-  if (result.copiedToClipboard === true) {
-    // The path went to the clipboard because there was no editor to insert
-    // into, so the message has to say what to do next.
+  if (result.destination === 'clipboard') {
+    // Nothing received the path, so the message has to say what to do next.
     return `Image saved! Path copied - press Ctrl+V to paste: ${image.relativePath}`;
+  }
+  if (result.destination === 'terminal') {
+    // Worth naming: the path was typed rather than run, and the cursor is
+    // sitting right after it.
+    return `Image saved and path typed into the terminal: ${image.relativePath}`;
   }
   const sizeMB = (image.fileSize / (1024 * 1024)).toFixed(2);
   const dims =
@@ -189,7 +231,7 @@ export const clipshot = defineModule('clipshot', (module): undefined => {
 
   module.commands.handle(PasteImage, {
     inject: { settings: Settings.token },
-    execute: async (context: OperationContext, _args, { settings }): Promise<void> => {
+    execute: async (context: OperationContext, [args], { settings }): Promise<void> => {
       const config = loadConfiguration(settings);
       const logger = filtered(context.logger, config.logLevel);
 
@@ -200,7 +242,7 @@ export const clipshot = defineModule('clipshot', (module): undefined => {
         { title: 'ClipShot', cancellable: false },
         async (progress) => {
           progress.report({ message: 'Reading clipboard...' });
-          return getPasteHandler().handlePaste(config, logger);
+          return getPasteHandler().handlePaste(config, logger, args.surface);
         }
       );
 

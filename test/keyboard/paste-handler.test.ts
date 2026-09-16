@@ -58,8 +58,41 @@ function createMockConfig(overrides: Partial<ExtensionConfig> = {}): ExtensionCo
     },
     terminal: {
       registerShortcut: true,
+      target: 'terminal',
     },
     ...overrides,
+  };
+}
+
+/** A terminal for `window.activeTerminal`, recording what was sent to it. */
+function createMockTerminal(): { sendText: ReturnType<typeof vi.fn> } {
+  return { sendText: vi.fn() };
+}
+
+/** The arrangement every "the image was saved" test needs. */
+function arrangeSavedImage(
+  clipboard: { getImageData: ReturnType<typeof vi.fn>; cleanup: ReturnType<typeof vi.fn> },
+  processor: { processAndSave: ReturnType<typeof vi.fn> },
+  processedImage: ProcessedImage
+): void {
+  (vscode.workspace as { workspaceFolders?: unknown[] }).workspaceFolders = [
+    { uri: { fsPath: '/workspace' } },
+  ];
+  clipboard.getImageData.mockResolvedValue(createMockClipboardData(true));
+  clipboard.cleanup.mockResolvedValue(undefined);
+  processor.processAndSave.mockResolvedValue(processedImage);
+}
+
+/** An editor that records whether anything tried to write into it. */
+function createMockEditor(languageId: string): {
+  document: { languageId: string };
+  selections: unknown[];
+  edit: ReturnType<typeof vi.fn>;
+} {
+  return {
+    document: { languageId },
+    selections: [{ isEmpty: true, active: { line: 0, character: 0 } }],
+    edit: vi.fn().mockResolvedValue(true),
   };
 }
 
@@ -121,6 +154,8 @@ describe('PasteHandler', () => {
 
     // Reset vscode mocks
     (vscode.window as { activeTextEditor?: unknown }).activeTextEditor = undefined;
+    // Not part of the kit's vscode mock, so it is set here rather than cleared.
+    (vscode.window as { activeTerminal?: unknown }).activeTerminal = undefined;
     (vscode.workspace as { workspaceFolders?: unknown[] }).workspaceFolders = undefined;
     vi.mocked(vscode.commands.executeCommand).mockResolvedValue(undefined);
     vi.mocked(vscode.env.clipboard.writeText).mockResolvedValue(undefined);
@@ -321,6 +356,7 @@ describe('PasteHandler', () => {
       const result = await handler.handlePaste(config, mockLogger);
 
       expect(result.success).toBe(true);
+      expect(result.destination).toBe('clipboard');
       expect(vscode.env.clipboard.writeText).toHaveBeenCalled();
     });
 
@@ -342,52 +378,168 @@ describe('PasteHandler', () => {
       expect(mockLogger.error).toHaveBeenCalled();
     });
 
-    it('should try multiple paste commands when no editor', async () => {
+    // Replaces two tests that asserted the old fallback chain. It tried
+    // `editor.action.clipboardPasteAction` first and treated "did not throw" as
+    // "pasted" — but that command resolves whether or not anything handled it,
+    // so the second command was unreachable and `copiedToClipboard` was never
+    // true. On desktop the first command also reached `webContents.paste()`,
+    // firing a native paste at whatever had focus.
+    it('copies to the clipboard, and pastes nothing, when there is no editor', async () => {
       const config = createMockConfig();
       const processedImage = createMockProcessedImage();
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, processedImage);
 
-      (vscode.workspace as { workspaceFolders?: unknown[] }).workspaceFolders = [
-        { uri: { fsPath: '/workspace' } },
-      ];
-      mockClipboardManager.getImageData.mockResolvedValue(createMockClipboardData(true));
-      mockClipboardManager.cleanup.mockResolvedValue(undefined);
-      mockImageProcessor.processAndSave.mockResolvedValue(processedImage);
-
-      // No active editor
       (vscode.window as { activeTextEditor?: unknown }).activeTextEditor = undefined;
-
-      // First paste command fails, second succeeds
-      vi.mocked(vscode.commands.executeCommand)
-        .mockRejectedValueOnce(new Error('Not available'))
-        .mockResolvedValueOnce(undefined);
 
       const result = await handler.handlePaste(config, mockLogger);
 
       expect(result.success).toBe(true);
-      expect(vscode.commands.executeCommand).toHaveBeenCalledTimes(2);
+      expect(result.destination).toBe('clipboard');
+      expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('./.clipshot/image_001.png');
+      expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
+    });
+  });
+
+  // Issue #69. VS Code has no runtime API for terminal focus, so the surface
+  // arrives as an argument from the keybinding's `when` clause. Everything
+  // here turns on the handler believing it rather than asking
+  // `activeTextEditor`, which stays set — and stays writable — behind a
+  // focused, even maximized, terminal.
+  describe('handlePaste on the terminal surface', () => {
+    it('types the path into the terminal and leaves the background editor alone', async () => {
+      const config = createMockConfig();
+      const processedImage = createMockProcessedImage();
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, processedImage);
+
+      const backgroundEditor = createMockEditor('plaintext');
+      (vscode.window as { activeTextEditor?: unknown }).activeTextEditor = backgroundEditor;
+      const terminal = createMockTerminal();
+      (vscode.window as { activeTerminal?: unknown }).activeTerminal = terminal;
+
+      const result = await handler.handlePaste(config, mockLogger, 'terminal');
+
+      expect(result.success).toBe(true);
+      expect(result.destination).toBe('terminal');
+      // `false` is `shouldExecute`: no newline, so nothing runs.
+      expect(terminal.sendText).toHaveBeenCalledWith('./.clipshot/image_001.png', false);
+      expect(backgroundEditor.edit).not.toHaveBeenCalled();
+      expect(vscode.env.clipboard.writeText).not.toHaveBeenCalled();
     });
 
-    it('should set copiedToClipboard when all paste commands fail', async () => {
+    it('sends a bare path even when a Markdown editor is active behind it', async () => {
       const config = createMockConfig();
       const processedImage = createMockProcessedImage();
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, processedImage);
 
-      (vscode.workspace as { workspaceFolders?: unknown[] }).workspaceFolders = [
-        { uri: { fsPath: '/workspace' } },
-      ];
-      mockClipboardManager.getImageData.mockResolvedValue(createMockClipboardData(true));
-      mockClipboardManager.cleanup.mockResolvedValue(undefined);
-      mockImageProcessor.processAndSave.mockResolvedValue(processedImage);
+      // `insert.format: auto` used to be resolved from this editor's language,
+      // so a Markdown file behind the terminal produced `![alt](path)`.
+      (vscode.window as { activeTextEditor?: unknown }).activeTextEditor =
+        createMockEditor('markdown');
+      const terminal = createMockTerminal();
+      (vscode.window as { activeTerminal?: unknown }).activeTerminal = terminal;
 
-      // No active editor
-      (vscode.window as { activeTextEditor?: unknown }).activeTextEditor = undefined;
+      const result = await handler.handlePaste(config, mockLogger, 'terminal');
 
-      // All paste commands fail
-      vi.mocked(vscode.commands.executeCommand).mockRejectedValue(new Error('Not available'));
+      expect(result.insertedText).toBe('./.clipshot/image_001.png');
+      expect(terminal.sendText).toHaveBeenCalledWith('./.clipshot/image_001.png', false);
+    });
 
-      const result = await handler.handlePaste(config, mockLogger);
+    it('still honours a format the user asked for explicitly', async () => {
+      const config = createMockConfig({
+        insert: { format: 'markdown', altSource: 'filename', altLiteral: 'image' },
+      });
+      const processedImage = createMockProcessedImage();
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, processedImage);
 
-      expect(result.success).toBe(true);
-      expect(result.copiedToClipboard).toBe(true);
+      const terminal = createMockTerminal();
+      (vscode.window as { activeTerminal?: unknown }).activeTerminal = terminal;
+
+      const result = await handler.handlePaste(config, mockLogger, 'terminal');
+
+      expect(result.insertedText).toBe('![image_001.png](./.clipshot/image_001.png)');
+    });
+
+    it('copies to the clipboard when terminal.target is clipboard', async () => {
+      const config = createMockConfig({ terminal: { registerShortcut: true, target: 'clipboard' } });
+      const processedImage = createMockProcessedImage();
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, processedImage);
+
+      const terminal = createMockTerminal();
+      (vscode.window as { activeTerminal?: unknown }).activeTerminal = terminal;
+
+      const result = await handler.handlePaste(config, mockLogger, 'terminal');
+
+      expect(result.destination).toBe('clipboard');
+      expect(terminal.sendText).not.toHaveBeenCalled();
+      expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('./.clipshot/image_001.png');
+    });
+
+    it('falls back to the clipboard rather than an editor when no terminal is active', async () => {
+      const config = createMockConfig();
+      const processedImage = createMockProcessedImage();
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, processedImage);
+
+      const backgroundEditor = createMockEditor('plaintext');
+      (vscode.window as { activeTextEditor?: unknown }).activeTextEditor = backgroundEditor;
+      (vscode.window as { activeTerminal?: unknown }).activeTerminal = undefined;
+
+      const result = await handler.handlePaste(config, mockLogger, 'terminal');
+
+      expect(result.destination).toBe('clipboard');
+      expect(backgroundEditor.edit).not.toHaveBeenCalled();
+      expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('./.clipshot/image_001.png');
+    });
+
+    it('quotes a path containing a space', async () => {
+      const config = createMockConfig();
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, {
+        ...createMockProcessedImage(),
+        relativePath: './my shots/image_001.png',
+      });
+
+      const terminal = createMockTerminal();
+      (vscode.window as { activeTerminal?: unknown }).activeTerminal = terminal;
+
+      await handler.handlePaste(config, mockLogger, 'terminal');
+
+      expect(terminal.sendText).toHaveBeenCalledWith('"./my shots/image_001.png"', false);
+      // The result keeps the path itself; quoting belongs to the terminal.
+    });
+
+    it('sends a path that cannot be quoted safely bare', async () => {
+      const config = createMockConfig();
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, {
+        ...createMockProcessedImage(),
+        relativePath: './my "shots"/image_001.png',
+      });
+
+      const terminal = createMockTerminal();
+      (vscode.window as { activeTerminal?: unknown }).activeTerminal = terminal;
+
+      await handler.handlePaste(config, mockLogger, 'terminal');
+
+      // The escape character differs between POSIX shells and PowerShell, so
+      // ClipShot does not guess one.
+      expect(terminal.sendText).toHaveBeenCalledWith('./my "shots"/image_001.png', false);
+    });
+
+    it('never sends a newline, which would submit the line', async () => {
+      const config = createMockConfig();
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, {
+        ...createMockProcessedImage(),
+        // `saveDirectory` does not pass through `sanitizeFileName`, which is
+        // what strips control characters everywhere else.
+        relativePath: './shots\r\nrm -rf x/image_001.png',
+      });
+
+      const terminal = createMockTerminal();
+      (vscode.window as { activeTerminal?: unknown }).activeTerminal = terminal;
+
+      await handler.handlePaste(config, mockLogger, 'terminal');
+
+      const [sent] = vi.mocked(terminal.sendText).mock.calls[0] as [string, boolean];
+      expect(sent).not.toMatch(/[\r\n]/);
+      expect(sent).toBe('"./shots rm -rf x/image_001.png"');
     });
   });
 
