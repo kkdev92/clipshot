@@ -28,6 +28,32 @@ export type AltSource = 'filename' | 'literal';
 export type NotificationLevel = 'all' | 'errors' | 'none';
 
 /**
+ * Which pane the paste command was invoked from.
+ *
+ * VS Code has no runtime API for focus — `window.activeTextEditor` is "the
+ * editor with focus, or the last one to change input", so it stays set while a
+ * terminal has focus, and `window.activeTerminal` has the same "or most
+ * recently had focus" wording. The only thing that knows is the keybinding's
+ * `when` clause, so the answer arrives as a command argument rather than
+ * being asked for. Anything other than an explicit `terminal` is `editor`.
+ */
+export type PasteSurface = 'editor' | 'terminal';
+
+/**
+ * What `clipshot.terminal.target` does on the terminal surface.
+ *
+ * Not a choice a user is expected to make: `terminal` is the default and the
+ * behaviour the shortcut is for. `clipboard` exists for terminals running
+ * something that would read the typed characters as commands.
+ */
+export type TerminalTarget = 'terminal' | 'clipboard';
+
+/**
+ * Where the path actually ended up, for the notification to describe.
+ */
+export type PasteDestination = 'editor' | 'terminal' | 'clipboard';
+
+/**
  * Resize mode
  */
 export type ResizeMode = 'off' | 'fit';
@@ -126,6 +152,7 @@ export interface ExtensionConfig {
   };
   terminal: {
     registerShortcut: boolean;
+    target: TerminalTarget;
   };
 }
 
@@ -155,7 +182,13 @@ export interface PasteResult {
   success: boolean;
   processedImage?: ProcessedImage;
   insertedText?: string;
-  /** True if path was copied to clipboard (for chat inputs, etc.) */
-  copiedToClipboard?: boolean;
+  /**
+   * Where the path went. Absent when nothing was saved.
+   *
+   * A boolean `copiedToClipboard` used to carry this, which could not tell a
+   * terminal apart from an editor — and the notification has something
+   * different to say about each of the three.
+   */
+  destination?: PasteDestination;
   error?: string;
 }

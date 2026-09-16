@@ -46,6 +46,14 @@ suite('ClipShot Extension E2E Tests', () => {
     assert.strictEqual(config.get('enabled'), true, 'enabled should be true by default');
     assert.strictEqual(config.get('saveDirectory'), '.clipshot', 'saveDirectory default mismatch');
     assert.strictEqual(config.get('output.format'), 'png', 'output.format default mismatch');
+    // On by default: writing into a hidden editor was a bug, not a preference,
+    // so the fix is not behind an opt-in. VS Code resolving this to 'terminal'
+    // also proves it accepted the enum in the manifest.
+    assert.strictEqual(
+      config.get('terminal.target'),
+      'terminal',
+      'terminal.target default mismatch'
+    );
   });
 
   test('Configuration should be readable', () => {

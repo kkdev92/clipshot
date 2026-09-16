@@ -280,11 +280,46 @@ describe('extension', () => {
     });
 
     it('tells the user to paste manually when the path went to the clipboard', async () => {
-      stubPasteResult({ success: true, processedImage, copiedToClipboard: true });
+      stubPasteResult({ success: true, processedImage, destination: 'clipboard' });
 
       await (await activateAndGetPasteCommand())();
 
       expect(notifiedMessages(vscode.window.showInformationMessage)[0]).toContain('Path copied');
+    });
+
+    it('says so when the path was typed into the terminal', async () => {
+      stubPasteResult({ success: true, processedImage, destination: 'terminal' });
+
+      await (await activateAndGetPasteCommand())();
+
+      expect(notifiedMessages(vscode.window.showInformationMessage)[0]).toContain(
+        'typed into the terminal'
+      );
+    });
+
+    // The keybinding's `when` clause is the only thing that knows where focus
+    // is, and it says so through this argument. If it stopped reaching the
+    // handler the extension would go back to writing into a background editor,
+    // and nothing else here would notice.
+    it.each([
+      ['{ surface: terminal }', [{ surface: 'terminal' }], 'terminal'],
+      ['no arguments (Command Palette)', [], 'editor'],
+      ['an argument it does not understand', [{ surface: 'sidebar' }], 'editor'],
+      ['a non-object argument', ['terminal'], 'editor'],
+    ])('passes the surface through for %s', async (_label, args, expected) => {
+      const handlePaste = vi.fn().mockResolvedValue({ success: true, processedImage });
+      vi.mocked(pasteHandler.getPasteHandler).mockReturnValue({ handlePaste } as never);
+
+      const command = (await activateAndGetPasteCommand()) as (
+        ...args: readonly unknown[]
+      ) => Promise<void>;
+      await command(...args);
+
+      expect(handlePaste).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expected
+      );
     });
 
     it('surfaces a failure as an error notification', async () => {

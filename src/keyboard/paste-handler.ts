@@ -3,7 +3,16 @@
  */
 
 import * as vscode from 'vscode';
-import type { ExtensionConfig, PasteResult, InsertFormat, AltSource, ProcessedImage, Logger } from '../core/types';
+import type {
+  ExtensionConfig,
+  PasteResult,
+  PasteDestination,
+  PasteSurface,
+  InsertFormat,
+  AltSource,
+  ProcessedImage,
+  Logger,
+} from '../core/types';
 import {
   NoImageError,
   NoWorkspaceError,
@@ -82,6 +91,27 @@ function formatInsertText(
 }
 
 /**
+ * A saved path as one line a terminal can take.
+ */
+function toTerminalLine(text: string): string {
+  // A newline would submit the line rather than type it. `sendText` appends
+  // none, but one already inside the text would do the job itself — and
+  // `saveDirectory` reaches the path without passing through
+  // `sanitizeFileName`, which is what strips control characters everywhere
+  // else.
+  const line = text.replace(/[\r\n]+/g, ' ').trim();
+
+  // A shell splits on spaces, so a path holding one has to arrive quoted.
+  // Quotes inside are not escaped, and deliberately: `sanitizeFileName`
+  // removes `"` from the file name, the only other way one reaches the path is
+  // a `saveDirectory` the validator already warns about, and the escape
+  // character differs between POSIX shells and PowerShell — inventing one
+  // would break whichever shell it guessed wrong about. A path that cannot be
+  // quoted is sent bare.
+  return /\s/.test(line) && !line.includes('"') ? `"${line}"` : line;
+}
+
+/**
  * Paste handler class
  */
 export class PasteHandler {
@@ -92,11 +122,16 @@ export class PasteHandler {
    *
    * @param config - Extension configuration
    * @param logger - Logger instance
+   * @param surface - Which pane the shortcut was pressed in. Supplied by the
+   *   keybinding's `when` clause, because VS Code exposes no runtime API for
+   *   focus; defaults to the editor for the Command Palette and for callers
+   *   that pass nothing.
    * @returns Paste result with success status and processed image info
    */
   async handlePaste(
     config: ExtensionConfig,
-    logger: Logger
+    logger: Logger,
+    surface: PasteSurface = 'editor'
   ): Promise<PasteResult> {
     // Prevent concurrent processing
     if (this.isProcessing) {
@@ -107,7 +142,7 @@ export class PasteHandler {
     this.isProcessing = true;
 
     try {
-      return await this.executePaste(config, logger);
+      return await this.executePaste(config, logger, surface);
     } finally {
       this.isProcessing = false;
     }
@@ -115,9 +150,14 @@ export class PasteHandler {
 
   private async executePaste(
     config: ExtensionConfig,
-    logger: Logger
+    logger: Logger,
+    surface: PasteSurface
   ): Promise<PasteResult> {
-    const editor = vscode.window.activeTextEditor;
+    // Read only on the editor surface. `activeTextEditor` is "the editor with
+    // focus, or the last one to change input", so with a terminal focused it
+    // still names a background editor — one that may not even be visible.
+    // Touching it at all is the bug this branch exists to avoid.
+    const editor = surface === 'terminal' ? undefined : vscode.window.activeTextEditor;
     const clipboardManager = getClipboardManager(logger);
 
     try {
@@ -195,7 +235,9 @@ export class PasteHandler {
         processingMs: Date.now() - processStart,
       });
 
-      // Format the insert text
+      // Format the insert text. On the terminal surface there is no language
+      // to read, so `auto` resolves to the bare path a shell can use — and a
+      // Markdown file sitting behind the terminal no longer decides the format.
       const insertText = formatInsertText(
         processedImage,
         config.insert.format,
@@ -204,39 +246,7 @@ export class PasteHandler {
         editor?.document.languageId
       );
 
-      // Insert text at cursor or copy to clipboard
-      const inserted = await this.insertText(insertText, editor);
-      let copiedToClipboard = false;
-
-      if (!inserted) {
-        // No active text editor - try clipboard-based paste
-        // 1. Copy path to clipboard
-        await vscode.env.clipboard.writeText(insertText);
-        logger.debug('Path copied to clipboard');
-
-        // 2. Try multiple paste commands in order of reliability
-        const pasteCommands = [
-          'editor.action.clipboardPasteAction',   // Editor, webview
-          'workbench.action.terminal.paste',       // Terminal
-        ];
-
-        let pasted = false;
-        for (const command of pasteCommands) {
-          try {
-            await vscode.commands.executeCommand(command);
-            logger.debug(`Paste attempted via ${command}`);
-            pasted = true;
-            break;
-          } catch {
-            logger.debug(`${command} failed, trying next`);
-          }
-        }
-
-        copiedToClipboard = !pasted;
-        if (!pasted) {
-          logger.debug('All paste commands failed, path remains in clipboard for manual Ctrl+V');
-        }
-      }
+      const destination = await this.deliver(insertText, surface, config, editor, logger);
 
       // Clean up clipboard manager
       await clipboardManager.cleanup();
@@ -245,7 +255,7 @@ export class PasteHandler {
         success: true,
         processedImage,
         insertedText: insertText,
-        copiedToClipboard,
+        destination,
       };
     } catch (error) {
       // Clean up on error
@@ -279,6 +289,60 @@ export class PasteHandler {
       return undefined;
     }
     return workspaceFolders[0]?.uri.fsPath;
+  }
+
+  /**
+   * Puts the path where the shortcut was pressed, and says where that was.
+   *
+   * The clipboard is the last resort rather than a fourth case: it is what
+   * happens when the surface has nowhere to put the text, and what the user
+   * asked for when `clipshot.terminal.target` is `clipboard`.
+   */
+  private async deliver(
+    text: string,
+    surface: PasteSurface,
+    config: ExtensionConfig,
+    editor: vscode.TextEditor | undefined,
+    logger: Logger
+  ): Promise<PasteDestination> {
+    if (surface === 'terminal') {
+      if (config.terminal.target === 'terminal' && this.sendToTerminal(text, logger)) {
+        return 'terminal';
+      }
+    } else if (await this.insertText(text, editor)) {
+      return 'editor';
+    }
+
+    // Nothing is pasted on the user's behalf here. The version that tried to
+    // could not tell success from failure —
+    // `editor.action.clipboardPasteAction` resolves whether or not anything
+    // handled it — and on desktop it reached `webContents.paste()`, firing a
+    // native paste at whatever had focus, after overwriting the image the user
+    // had just copied. Leaving the path on the clipboard and saying so is the
+    // behaviour the README always described.
+    await vscode.env.clipboard.writeText(text);
+    logger.debug('Path copied to clipboard');
+    return 'clipboard';
+  }
+
+  /**
+   * Types the path into the focused terminal.
+   *
+   * @returns false when there is no terminal to type into, so the caller can
+   *   fall back rather than dropping the path
+   */
+  private sendToTerminal(text: string, logger: Logger): boolean {
+    const terminal = vscode.window.activeTerminal;
+    if (!terminal) {
+      logger.debug('Terminal has focus but no terminal is active; using the clipboard');
+      return false;
+    }
+
+    // `false` is `shouldExecute`: no newline is appended, so the path is typed
+    // and nothing runs until the user says so.
+    terminal.sendText(toTerminalLine(text), false);
+    logger.debug('Path sent to the terminal');
+    return true;
   }
 
   /**

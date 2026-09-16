@@ -2,7 +2,7 @@
   "name": "clipshot",
   "displayName": "ClipShot",
   "description": "Paste clipboard images with automatic file saving - perfect for AI chat and documentation",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "publisher": "kkdev92",
   "author": {
     "name": "kkdev92",
@@ -58,6 +58,15 @@
         "command": "clipshot.pasteImage",
         "key": "ctrl+shift+v",
         "mac": "cmd+shift+v"
+      },
+      {
+        "command": "clipshot.pasteImage",
+        "key": "ctrl+shift+v",
+        "mac": "cmd+shift+v",
+        "when": "terminalFocus",
+        "args": {
+          "surface": "terminal"
+        }
       }
     ],
     "configuration": {
@@ -223,6 +232,19 @@
           "type": "boolean",
           "default": true,
           "description": "Let Ctrl+Shift+V reach ClipShot while the integrated terminal has focus, by adding clipshot.pasteImage to terminal.integrated.commandsToSkipShell in your User settings. Without that entry the terminal keeps the key press and nothing happens. ClipShot appends the entry once and never removes it; turn this off to leave your settings untouched."
+        },
+        "clipshot.terminal.target": {
+          "type": "string",
+          "default": "terminal",
+          "enum": [
+            "terminal",
+            "clipboard"
+          ],
+          "enumDescriptions": [
+            "Type the path into the focused terminal. No newline is sent, so nothing runs until you press Enter.",
+            "Copy the path to the clipboard and say so, for pasting with Ctrl+V."
+          ],
+          "description": "Where the path goes when Ctrl+Shift+V is pressed with the integrated terminal focused. The default types it into the terminal; switch to 'clipboard' if you would rather ClipShot did not write into whatever is running there."
         }
       }
     }

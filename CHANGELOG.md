@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-16
+
+**With a terminal focused, `Ctrl+Shift+V` now types the path into the terminal.**
+It used to insert the path into an editor instead — one that might be scrolled
+out of sight, or hidden entirely behind a maximised panel.
+
+0.6.0 made the shortcut reach ClipShot while a terminal has focus. What it did
+not do was tell ClipShot where that focus was. The path went to
+`window.activeTextEditor`, and the name is misleading: the VS Code API defines
+it as the editor that has focus *or, when none does, the one that changed input
+most recently*. A terminal taking focus does not clear it. Neither does
+maximising the panel — `visibleTextEditors` does not even drop to zero. So the
+editor was always there, `editor.edit()` always succeeded, and the clipboard
+fallback the README described could never run.
+
+There is no VS Code API that answers "does the terminal have focus?"; the
+request for one was closed as not planned. The one mechanism that knows is the
+keybinding's own `when` clause, so ClipShot now contributes a second
+`Ctrl+Shift+V` binding gated on `terminalFocus` that tells the command where it
+was pressed. The command id is unchanged, so the
+`terminal.integrated.commandsToSkipShell` entry ClipShot wrote once in 0.6.0
+still covers it — no settings are touched a second time.
+
+Nothing is executed. The path is sent without a newline, so it is typed and
+waits for you.
+
+Reported by [@gitfool](https://github.com/gitfool) in
+[#69](https://github.com/kkdev92/clipshot/issues/69), with the reproduction and
+the `activeTextEditor` analysis that made the rest of it quick to find.
+
+### Fixed
+
+- **The path goes to the focused terminal, not to a background editor.**
+- **The clipboard fallback works.** It used to try
+  `editor.action.clipboardPasteAction` and treat "did not throw" as "pasted" —
+  but that command resolves whether or not anything handled it, so the fallback
+  always reported success, never reached the terminal paste behind it, and
+  never showed the "press `Ctrl+V`" hint it exists to show.
+- **`clipshot.insert.format: auto` no longer reads a hidden editor's file
+  type.** With a Markdown file open behind the terminal, a terminal paste could
+  produce `![alt](path)`. In a terminal `auto` now means the bare path, which is
+  what a shell can use. An explicit `markdown` or `html` is still honoured.
+
+### Added
+
+- **`clipshot.terminal.target`** (default `terminal`). Set it to `clipboard` to
+  keep ClipShot from writing into whatever is running in your terminal; the path
+  is copied for you to paste instead.
+- **Paths containing a space are quoted** when sent to a terminal.
+
+### Changed
+
+- **A path that reaches the clipboard is no longer pasted for you.** The
+  previous attempt could not tell whether it had worked, and on desktop it
+  reached Electron's native paste — firing at whatever had focus, after
+  overwriting the image you had just copied. The path is placed on the clipboard
+  and the notification says so, which is what the README always promised.
+
 ## [0.7.0] - 2026-09-14
 
 **Breaking: VS Code 1.137 or later is now required**, up from 1.136, in step with
@@ -407,7 +465,9 @@ Initial release.
   (PNG/JPEG/WebP) and quality.
 - Path validation and sanitization to keep saved files inside the workspace.
 
-[Unreleased]: https://github.com/kkdev92/clipshot/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/kkdev92/clipshot/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/kkdev92/clipshot/compare/v0.7.0...v0.8.0
+[0.7.0]: https://github.com/kkdev92/clipshot/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/kkdev92/clipshot/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/kkdev92/clipshot/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/kkdev92/clipshot/compare/v0.4.0...v0.4.1

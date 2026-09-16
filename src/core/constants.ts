@@ -54,6 +54,7 @@ export const DEFAULTS = {
   MAX_FILE_SIZE_MB: 10,
   NOTIFICATION_LEVEL: 'all' as const,
   TERMINAL_REGISTER_SHORTCUT: true,
+  TERMINAL_TARGET: 'terminal' as const,
 } as const;
 
 /**
