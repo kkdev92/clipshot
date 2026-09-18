@@ -2,10 +2,10 @@
 
 ## Supported Versions
 
-| Version        | Supported          |
-| -------------- | ------------------ |
-| 0.3.x          | :white_check_mark: |
-| 0.2.x and older | :x:               |
+| Version         | Supported          |
+| --------------- | ------------------ |
+| Latest release  | :white_check_mark: |
+| Older releases  | :x:                |
 
 Fixes ship in a new release rather than as patches to earlier versions.
 
