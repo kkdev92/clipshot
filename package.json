@@ -2,7 +2,7 @@
   "name": "clipshot",
   "displayName": "ClipShot",
   "description": "Paste clipboard images with automatic file saving - perfect for AI chat and documentation",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "publisher": "kkdev92",
   "author": {
     "name": "kkdev92",
@@ -19,7 +19,7 @@
   },
   "engines": {
     "node": ">=22.12.0",
-    "vscode": "^1.137.0"
+    "vscode": "^1.138.0"
   },
   "categories": [
     "AI",
@@ -280,10 +280,10 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@kkdev92/vscode-ext-kit": "^6.0.0",
+    "@kkdev92/vscode-ext-kit": "^7.0.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.20.2",
-    "@types/vscode": "~1.137.0",
+    "@types/vscode": "~1.138.0",
     "@vitest/coverage-v8": "^5.0.0",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.9.2",
