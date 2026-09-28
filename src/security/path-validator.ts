@@ -28,24 +28,8 @@ export async function validatePathInsideWorkspace(
     // Normalize both paths
     const normalizedWorkspace = normalizePath(realWorkspaceRoot);
 
-    // Check if target path exists
-    let realTargetPath: string;
-    try {
-      // If target exists, resolve its real path
-      realTargetPath = await fs.realpath(targetPath);
-    } catch {
-      // Target doesn't exist yet - validate parent directory
-      const parentDir = path.dirname(targetPath);
-      try {
-        const realParentDir = await fs.realpath(parentDir);
-        realTargetPath = path.join(realParentDir, path.basename(targetPath));
-      } catch {
-        // Parent doesn't exist - check the constructed path
-        // This is acceptable for new directories that will be created
-        const resolvedTarget = path.resolve(workspaceRoot, targetPath);
-        realTargetPath = resolvedTarget;
-      }
-    }
+    // Resolve the target through links as far as it exists
+    const realTargetPath = await resolveExistingPrefix(targetPath, workspaceRoot);
 
     const normalizedTarget = normalizePath(realTargetPath);
 
@@ -69,6 +53,41 @@ export async function validatePathInsideWorkspace(
       `Failed to validate path: ${error instanceof Error ? error.message : String(error)}`,
       'Invalid path'
     );
+  }
+}
+
+/**
+ * Resolve a path through links as far as it exists, then append the rest.
+ *
+ * `realpath` fails on a path that does not exist yet, so the nearest ancestor
+ * that does exist is resolved instead and the missing segments are appended to
+ * it. Resolving less than that — only the parent, or nothing once the parent is
+ * missing too — lets a link in the existing part lead out of the workspace
+ * unseen, while a workspace that is itself reached through a link stops looking
+ * like it contains its own new folders.
+ *
+ * @param targetPath - The path to resolve; a relative path is taken from the workspace root
+ * @param workspaceRoot - The workspace root path
+ * @returns The real path of the existing part, followed by the missing segments
+ */
+async function resolveExistingPrefix(targetPath: string, workspaceRoot: string): Promise<string> {
+  const absolute = path.isAbsolute(targetPath) ? targetPath : path.join(workspaceRoot, targetPath);
+  const missing: string[] = [];
+  let current = absolute;
+
+  for (;;) {
+    try {
+      const real = await fs.realpath(current);
+      return path.join(real, ...missing.reverse());
+    } catch {
+      const parent = path.dirname(current);
+      if (parent === current) {
+        // Not even the root resolved: compare the path as given
+        return path.resolve(absolute);
+      }
+      missing.push(path.basename(current));
+      current = parent;
+    }
   }
 }
 

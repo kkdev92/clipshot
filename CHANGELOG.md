@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The check that keeps saved images inside the workspace now follows links in
+  the part of the path that already exists when the folders below it do not
+  exist yet. A save directory whose existing part was a link leading out of the
+  workspace, followed by folders still to be created, passed the check, so the
+  folders and the image were created on the far side of the link. The same gap
+  refused new nested folders in a workspace opened through a link.
+
 ## [0.9.0] - 2026-09-18
 
 **Breaking: VS Code 1.138 or later is now required**, up from 1.137, in step with
