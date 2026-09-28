@@ -50,7 +50,8 @@ src/
 ├── security/             # Security utilities
 ├── clipboard/            # Clipboard providers
 ├── image/                # Image processing
-└── keyboard/             # Paste handling
+├── keyboard/             # Paste handling
+└── terminal/             # Keeping the paste key working in the integrated terminal
 ```
 
 ## Development Workflow
