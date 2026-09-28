@@ -10,7 +10,7 @@ assignees: ''
 
 - **OS**: (e.g., Windows 11, macOS 14, Ubuntu 24.04)
 - **VS Code Version**: (e.g., 1.138.0)
-- **ClipShot Version**: (e.g., 0.1.2)
+- **ClipShot Version**: (shown in the Extensions view)
 
 ## Description
 
