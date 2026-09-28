@@ -154,4 +154,4 @@ jobs:
         with:
           name: clipshot-vsix-${{ matrix.target }}
           path: "*.vsix"
-          retention-days: 7
+          retention-days: 1
