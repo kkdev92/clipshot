@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-28
+
+### Changed
+
+- Releases are published without a stored token. The release workflow signs in
+  to Microsoft Entra ID with the OIDC token GitHub Actions issues to the job,
+  and `vsce publish --azure-credential` publishes with that sign-in instead of
+  the personal access token it used before. The packages are built with
+  `@vscode/vsce` 4.0.0, up from 3.9.2.
+
 ### Fixed
 
 - The check that keeps saved images inside the workspace now follows links in
@@ -495,7 +505,8 @@ Initial release.
   (PNG/JPEG/WebP) and quality.
 - Path validation and sanitization to keep saved files inside the workspace.
 
-[Unreleased]: https://github.com/kkdev92/clipshot/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/kkdev92/clipshot/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/kkdev92/clipshot/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/kkdev92/clipshot/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/kkdev92/clipshot/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/kkdev92/clipshot/compare/v0.6.0...v0.7.0
