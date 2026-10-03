@@ -40,16 +40,17 @@ const cmd = `powershell.exe -EncodedCommand ${encoded}`;
 
 ### Path Traversal Prevention
 
-- All paths are validated to be within the workspace
-- `realpath()` is used to resolve symbolic links
-- Parent directory references (`..`) are blocked
+- The saved image, and every folder created for it, is checked to be inside the workspace before it is written
+- `realpath()` resolves symbolic links in the part of the path that already exists, so a link cannot lead the image outside the workspace
+- A save directory that leads outside the workspace, through `..` or otherwise, is refused when the image is saved. One whose `..` stays inside the workspace resolves to the folder it names
 
 ```typescript
-// Path validation
-const realTarget = await fs.realpath(targetPath);
-const relative = path.relative(workspaceRoot, realTarget);
-if (relative.startsWith('..')) {
-  throw new PathValidationError('Path is outside workspace');
+// Path validation (src/security/path-validator.ts, simplified)
+const realRoot = await fs.realpath(workspaceRoot);
+const realTarget = await resolveExistingPrefix(targetPath, workspaceRoot);
+const relative = path.relative(realRoot, realTarget);
+if (relative.startsWith('..') || path.isAbsolute(relative)) {
+  throw new PathValidationError('Path is outside the workspace');
 }
 ```
 
@@ -62,10 +63,10 @@ if (relative.startsWith('..')) {
 
 ### Input Validation
 
-All user-configurable values are validated:
-- Save directory cannot be absolute or contain `..`
-- File name patterns cannot contain shell metacharacters
-- Numeric values are clamped to valid ranges
+Settings are checked each time they are read:
+- Numeric values are clamped to valid ranges, and a value of the wrong type falls back to the default
+- A save directory that is absolute or contains `..`, and a file name pattern with shell metacharacters, are reported as configuration warnings in the ClipShot log. They are not what keeps writes inside the workspace; the check above is
+- Each generated file name has control characters, and the characters a Windows file name cannot hold (`< > : " / \ | ? *`), removed. On Windows, a reserved name such as `CON` is prefixed
 
 ### Workspace Trust
 
