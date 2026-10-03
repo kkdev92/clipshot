@@ -425,9 +425,10 @@ export function sanitizeConfiguration(config: DeepPartial<ExtensionConfig>): Dee
       .replace(/^\/+|\/+$/g, '');
   }
 
-  // Sanitize fileName.pattern - remove dangerous characters
+  // Trim fileName.pattern. Characters a file name cannot hold are removed from
+  // each generated name by sanitizeFileName; shell metacharacters in the pattern
+  // are only reported, by validateFileNamePattern.
   if (sanitized.fileName?.pattern !== undefined && sanitized.fileName.pattern !== '') {
-    // Keep only safe characters (alphanumeric, underscore, hyphen, dot, spaces, and ${} tokens)
     sanitized.fileName = {
       ...sanitized.fileName,
       pattern: sanitized.fileName.pattern.trim(),
