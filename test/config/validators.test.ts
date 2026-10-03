@@ -35,6 +35,18 @@ describe('validators', () => {
       expect(result.errors.some(e => e.includes('relative'))).toBe(true);
     });
 
+    it('should reject a path rooted at a drive or a separator, on every platform', () => {
+      for (const value of ['C:images', 'C:\\images', '\\images', '\\\\server\\share']) {
+        const result = validateSaveDirectory(value);
+        expect(result.valid, value).toBe(false);
+        expect(result.errors.some(e => e.includes('relative')), value).toBe(true);
+      }
+    });
+
+    it('should treat a value of only spaces as empty', () => {
+      expect(validateSaveDirectory('   ').errors).toContain('Save directory cannot be empty');
+    });
+
     it('should reject parent traversal', () => {
       const result = validateSaveDirectory('../outside');
       expect(result.valid).toBe(false);

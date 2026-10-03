@@ -21,13 +21,6 @@ export const COMMANDS = {
 } as const;
 
 /**
- * Context keys for VS Code when clause
- */
-export const CONTEXT_KEYS = {
-  ENABLED: `${EXTENSION_ID}.enabled`,
-} as const;
-
-/**
  * Configuration key prefix
  */
 export const CONFIG_PREFIX = EXTENSION_ID;

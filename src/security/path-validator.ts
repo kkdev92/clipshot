@@ -92,62 +92,6 @@ async function resolveExistingPrefix(targetPath: string, workspaceRoot: string):
 }
 
 /**
- * Check if a path contains parent directory traversal (..)
- *
- * @param inputPath - The path to check
- * @returns True if path contains parent traversal
- */
-export function containsParentTraversal(inputPath: string): boolean {
-  // Normalize path separators without resolving .. segments
-  const normalized = inputPath.replace(/\\/g, '/');
-
-  // Check for .. segments in the raw path (before resolution)
-  const segments = normalized.split('/');
-  return segments.some((segment) => segment === '..');
-}
-
-/**
- * Check if a path is absolute
- * Handles both Unix and Windows paths regardless of current platform
- *
- * @param inputPath - The path to check
- * @returns True if path is absolute
- */
-export function isAbsolutePath(inputPath: string): boolean {
-  // Unix absolute path
-  if (inputPath.startsWith('/')) {
-    return true;
-  }
-  // Windows absolute path (e.g., C:\, D:\)
-  if (/^[A-Za-z]:[/\\]/.test(inputPath)) {
-    return true;
-  }
-  return path.isAbsolute(inputPath);
-}
-
-/**
- * Validate that a path is a relative path without parent traversal
- *
- * @param inputPath - The path to validate
- * @throws PathValidationError if path is invalid
- */
-export function validateRelativePath(inputPath: string): void {
-  if (isAbsolutePath(inputPath)) {
-    throw new PathValidationError(
-      `Path '${inputPath}' is absolute, expected relative`,
-      'Path must be relative'
-    );
-  }
-
-  if (containsParentTraversal(inputPath)) {
-    throw new PathValidationError(
-      `Path '${inputPath}' contains parent directory traversal`,
-      'Path cannot contain ..'
-    );
-  }
-}
-
-/**
  * Normalize a path for consistent comparison
  * Handles cross-platform differences
  *

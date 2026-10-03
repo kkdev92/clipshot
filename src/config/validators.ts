@@ -3,6 +3,8 @@
  * Validates user settings to prevent security issues
  */
 
+import { checkRelativePath } from '@kkdev92/vscode-ext-kit';
+
 import type { ValidationResult, ExtensionConfig, DeepPartial } from '../core/types';
 import {
   LIMITS,
@@ -12,7 +14,6 @@ import {
   VALID_RESIZE_MODES,
   RESIZE_PRESETS,
 } from '../core/constants';
-import { containsParentTraversal, isAbsolutePath } from '../security/path-validator';
 
 /**
  * Validate the saveDirectory setting
@@ -23,19 +24,17 @@ import { containsParentTraversal, isAbsolutePath } from '../security/path-valida
 export function validateSaveDirectory(value: string): ValidationResult {
   const errors: string[] = [];
 
-  // Check for empty value
-  if (!value || value.trim() === '') {
+  // Empty, rooted (a drive, a leading separator, a share) or climbing out
+  // with `..`, judged the same way whichever platform the value was written on.
+  const problem = checkRelativePath(value);
+  if (problem === 'empty') {
     errors.push('Save directory cannot be empty');
     return { valid: false, errors };
   }
-
-  // Check for absolute path
-  if (isAbsolutePath(value)) {
+  if (problem === 'absolute') {
     errors.push('Save directory must be a relative path');
   }
-
-  // Check for parent directory traversal
-  if (containsParentTraversal(value)) {
+  if (problem === 'parent') {
     errors.push('Save directory cannot contain parent directory references (..)');
   }
 
