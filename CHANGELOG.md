@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- sharp, which converts and resizes the pasted image, 0.35.4 → 0.35.5. It ships
+  libvips 8.18.7, up from 8.18.6, with newer builds of the libraries libvips
+  uses.
+- `@kkdev92/vscode-ext-kit` `^7.0.0` → `^7.1.0`. Its log filter and its check
+  for relative paths replace ClipShot's own.
+- ClipShot no longer sets the `clipshot.enabled` context key. Nothing in
+  ClipShot read it; a keybinding of your own can test the setting as
+  `config.clipshot.enabled`.
+- A save directory starting with a drive letter, such as `C:images`, or with a
+  backslash is now reported in the log as not relative on every platform, as
+  one starting with `/` is. Where images are saved is unchanged.
+
 ## [0.9.1] - 2026-09-28
 
 ### Changed

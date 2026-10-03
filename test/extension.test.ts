@@ -22,8 +22,8 @@ vi.mock('../src/keyboard/paste-handler', () => ({
 }));
 
 import type * as vscodeTypes from 'vscode';
-import { COMMANDS, CONTEXT_KEYS, EXTENSION_NAME } from '../src/core/constants';
-import type { PasteResult } from '../src/core/types';
+import { COMMANDS, EXTENSION_NAME } from '../src/core/constants';
+import type { Logger, PasteResult } from '../src/core/types';
 
 let vscode: typeof import('vscode');
 let extension: typeof import('../src/extension');
@@ -89,6 +89,51 @@ function notifiedMessages(mock: unknown): string[] {
     .mock.calls.map((call) => String(call[0]));
 }
 
+/** Answers one `clipshot.*` key with `value`; every other key keeps its default. */
+function stubSetting(key: string, value: unknown): void {
+  const otherwise = vi.mocked(vscode.workspace.getConfiguration).getMockImplementation();
+  vi.mocked(vscode.workspace.getConfiguration).mockImplementation(((
+    section?: string,
+    scope?: vscodeTypes.ConfigurationScope
+  ) => {
+    const configuration = otherwise?.(section, scope);
+    if (section !== 'clipshot' || configuration === undefined) {
+      return configuration;
+    }
+    return {
+      ...configuration,
+      get: (name: string, fallback?: unknown) =>
+        name === key ? value : configuration.get(name, fallback),
+    };
+  }) as never);
+}
+
+/**
+ * Tells every configuration listener still subscribed that everything changed.
+ *
+ * The mock hands each subscription a `dispose` that detaches nothing, so a
+ * listener counts as gone once its `dispose` has been called — as it would be
+ * in VS Code.
+ */
+function fireConfigurationChange(): void {
+  const event = { affectsConfiguration: () => true } as vscodeTypes.ConfigurationChangeEvent;
+  const { calls, results } = vi.mocked(vscode.workspace.onDidChangeConfiguration).mock;
+  calls.forEach(([listener], index) => {
+    const subscription = results[index]?.value as { dispose: ReturnType<typeof vi.fn> } | undefined;
+    if (subscription?.dispose.mock.calls.length === 0) {
+      listener(event);
+    }
+  });
+}
+
+/** Messages the log channel received at `level`. */
+function logged(level: 'trace' | 'debug' | 'info' | 'warn' | 'error'): string[] {
+  const channel = vi.mocked(vscode.window.createOutputChannel).mock.results[0]?.value as
+    | Record<string, ReturnType<typeof vi.fn> | undefined>
+    | undefined;
+  return channel?.[level]?.mock.calls.map((call) => String(call[0])) ?? [];
+}
+
 describe('extension', () => {
   beforeEach(async () => {
     // A fresh module registry per test: a new application, a new vscode mock
@@ -130,38 +175,6 @@ describe('extension', () => {
       });
     });
 
-    it('publishes the enabled context key', async () => {
-      await extension.activate(createContext());
-
-      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
-        'setContext',
-        CONTEXT_KEYS.ENABLED,
-        true
-      );
-    });
-
-    it('activates anyway when the context key cannot be published', async () => {
-      // `setContext` is a VS Code built-in rather than something this extension
-      // registers, so a host that does not know it rejects the call. That must
-      // not fail activation: a stale `when` clause is a worse outcome to trade
-      // a working extension for.
-      //
-      // This used to be covered by accident — the kit's mock rejected every
-      // unregistered command, `setContext` included. It answers that one now,
-      // which is more faithful and left this path untested.
-      vi.mocked(vscode.commands.executeCommand).mockRejectedValueOnce(
-        new Error("command 'setContext' not found")
-      );
-
-      // Resolves rather than rejects: the failure is logged and swallowed.
-      await expect(extension.activate(createContext())).resolves.toBeUndefined();
-      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
-        'setContext',
-        CONTEXT_KEYS.ENABLED,
-        true
-      );
-    });
-
     it('registers disposables on the extension context', async () => {
       const context = createContext();
 
@@ -176,27 +189,27 @@ describe('extension', () => {
       expect(vscode.workspace.onDidChangeConfiguration).toHaveBeenCalled();
     });
 
-    it('refreshes the context key when configuration changes', async () => {
+    it('warns about the configuration at activation, and again when it changes', async () => {
+      stubSetting('saveDirectory', '../outside');
       await extension.activate(createContext());
+      const warnings = (): number =>
+        logged('warn').filter((message) => message.includes('Configuration warning')).length;
+      expect(warnings()).toBe(1);
 
-      // Two listeners are registered: the logger's level sync and the
-      // config schema's section watcher. Fire both.
-      const listeners = vi
-        .mocked(vscode.workspace.onDidChangeConfiguration)
-        .mock.calls.map((call) => call[0]);
-      expect(listeners.length).toBeGreaterThan(0);
+      fireConfigurationChange();
 
-      vi.mocked(vscode.commands.executeCommand).mockClear();
-      const event = { affectsConfiguration: () => true } as vscodeTypes.ConfigurationChangeEvent;
-      for (const listener of listeners) {
-        listener(event);
-      }
+      expect(warnings()).toBe(2);
+    });
 
-      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
-        'setContext',
-        CONTEXT_KEYS.ENABLED,
-        true
-      );
+    it('stops listening for configuration changes once deactivated', async () => {
+      await extension.activate(createContext());
+      await extension.deactivate();
+      const updates = (): number =>
+        logged('info').filter((message) => message.includes('Configuration updated')).length;
+
+      fireConfigurationChange();
+
+      expect(updates()).toBe(0);
     });
   });
 
@@ -392,6 +405,49 @@ describe('extension', () => {
       }
 
       expect(rejections).toEqual([]);
+    });
+  });
+
+  describe('clipshot.logLevel', () => {
+    /** A paste that logs one entry at each level through the logger it is handed. */
+    function stubLoggingPaste(): void {
+      vi.mocked(pasteHandler.getPasteHandler).mockReturnValue({
+        handlePaste: vi.fn((_config: unknown, logger: Logger) => {
+          logger.trace('probe');
+          logger.debug('probe');
+          logger.info('probe');
+          logger.warn('probe');
+          logger.error('probe');
+          return Promise.resolve({ success: true });
+        }),
+      } as never);
+    }
+
+    /** The levels at which the probe reached the log channel. */
+    function levelsLogged(): string[] {
+      return (['trace', 'debug', 'info', 'warn', 'error'] as const).filter((level) =>
+        logged(level).some((message) => message.includes('probe'))
+      );
+    }
+
+    it('passes on only what is at or above the level set', async () => {
+      stubSetting('logLevel', 'warn');
+      stubLoggingPaste();
+      const paste = await activateAndGetPasteCommand();
+
+      await paste();
+
+      expect(levelsLogged()).toEqual(['warn', 'error']);
+    });
+
+    it('passes on nothing when silent', async () => {
+      stubSetting('logLevel', 'silent');
+      stubLoggingPaste();
+      const paste = await activateAndGetPasteCommand();
+
+      await paste();
+
+      expect(levelsLogged()).toEqual([]);
     });
   });
 

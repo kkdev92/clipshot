@@ -62,10 +62,12 @@ describe('package.json', () => {
   it('declares what src declares', () => {
     // Including the three nullable settings. `resize.preset` defaults to null,
     // so its manifest type has to be `["string","null"]` — which is compared
-    // here as it is written, rather than normalised away first.
+    // here as it is written, rather than normalised away first. `engines`
+    // holds engines.vscode to the floor of the kit this extension is built on.
     assertManifestMatches(manifest, {
       settings: [Settings],
       commands: [PasteImage, EnableInTerminal],
+      engines: true,
     });
   });
 

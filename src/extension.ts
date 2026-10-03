@@ -10,26 +10,25 @@
  * safety live where they always did; this file is only how they are reached.
  */
 
-import * as vscode from 'vscode';
-
 import {
+  Notifications,
   defineCommandContract,
   defineExtension,
   defineModule,
+  filterLogger,
   type OperationContext,
   type Validator,
 } from '@kkdev92/vscode-ext-kit';
 
 import { Settings, loadConfiguration } from './config/schema';
 import { validateConfiguration } from './config/validators';
-import { COMMANDS, CONTEXT_KEYS, EXTENSION_NAME } from './core/constants';
+import { COMMANDS, EXTENSION_NAME } from './core/constants';
 import { disposeGlobalClipboardManager } from './clipboard/clipboard-manager';
 import { getPasteHandler } from './keyboard/paste-handler';
 import { describeSkipShellOutcome, ensureSkipShellEntry } from './terminal/skip-shell';
 import { disposeGlobalTempFileManager } from './security/temp-file-manager';
 import type {
   ExtensionConfig,
-  LogLevel,
   Logger,
   NotificationLevel,
   PasteDestination,
@@ -88,61 +87,6 @@ export const EnableInTerminal = defineCommandContract<readonly [], void>({
   id: COMMANDS.ENABLE_IN_TERMINAL,
 });
 
-/** Severity order, for comparing against the configured floor. */
-const SEVERITY: Record<Exclude<LogLevel, 'silent'>, number> = {
-  trace: 0,
-  debug: 1,
-  info: 2,
-  warn: 3,
-  error: 4,
-};
-
-/**
- * Applies `clipshot.logLevel` on top of the channel's own level.
- *
- * The framework logs into a `LogOutputChannel`, which VS Code filters by the
- * level chosen in the Output panel — so unlike before, this setting can only
- * make the log quieter, never louder. It is kept because "stop logging at all"
- * (`silent`) and "only warnings and worse" are things a user asks for and the
- * panel's dropdown is easy to miss; what it can no longer do is turn on `debug`
- * output that VS Code is filtering out one level up.
- */
-function filtered(logger: Logger, level: LogLevel): Logger {
-  if (level === 'trace') {
-    return logger;
-  }
-  const floor = level === 'silent' ? Number.POSITIVE_INFINITY : SEVERITY[level];
-  const passes = (of: Exclude<LogLevel, 'silent'>): boolean => SEVERITY[of] >= floor;
-  return {
-    trace: (message, fields): void => {
-      if (passes('trace')) {
-        logger.trace(message, fields);
-      }
-    },
-    debug: (message, fields): void => {
-      if (passes('debug')) {
-        logger.debug(message, fields);
-      }
-    },
-    info: (message, fields): void => {
-      if (passes('info')) {
-        logger.info(message, fields);
-      }
-    },
-    warn: (message, fields): void => {
-      if (passes('warn')) {
-        logger.warn(message, fields);
-      }
-    },
-    error: (message, error, fields): void => {
-      if (passes('error')) {
-        logger.error(message, error, fields);
-      }
-    },
-    withFields: (fields): Logger => filtered(logger.withFields(fields), level),
-  };
-}
-
 /** Logs every configuration problem as a warning, without refusing to run. */
 function warnAboutConfig(config: ExtensionConfig, logger: Logger): void {
   const result = validateConfiguration(config);
@@ -150,32 +94,6 @@ function warnAboutConfig(config: ExtensionConfig, logger: Logger): void {
     for (const error of result.errors) {
       logger.warn('Configuration warning', { issue: error });
     }
-  }
-}
-
-/**
- * Mirrors `enabled` into a context key.
- *
- * `setContext` is the only way a `when` clause in package.json can see a
- * setting, and there is no capability for it — a command is how VS Code
- * exposes it, so this is the one place the extension calls one directly.
- *
- * A failure here is reported and swallowed rather than propagated. The caller
- * is a settings-change listener and an activation path, and neither has a way
- * to act on it: the extension is still usable with a stale `when` clause, and
- * failing activation over a menu item's visibility would be the worse outcome.
- * It matters in practice because `setContext` is a VS Code built-in rather than
- * something this extension registers, so a test double that only knows
- * registered commands rejects it.
- */
-async function publishContextKeys(config: ExtensionConfig, logger: Logger): Promise<void> {
-  try {
-    await vscode.commands.executeCommand('setContext', CONTEXT_KEYS.ENABLED, config.enabled);
-  } catch (error) {
-    logger.debug('Could not publish the context key', {
-      key: CONTEXT_KEYS.ENABLED,
-      reason: error instanceof Error ? error.message : String(error),
-    });
   }
 }
 
@@ -233,7 +151,9 @@ export const clipshot = defineModule('clipshot', (module): undefined => {
     inject: { settings: Settings.token },
     execute: async (context: OperationContext, [args], { settings }): Promise<void> => {
       const config = loadConfiguration(settings);
-      const logger = filtered(context.logger, config.logLevel);
+      // clipshot.logLevel is a floor on top of the channel's own level: VS Code
+      // owns that level, and an extension cannot raise it.
+      const logger = filterLogger(context.logger, config.logLevel);
 
       // Read per invocation rather than held from activation: a setting the
       // user changed a moment ago should apply to this paste, and the accessor
@@ -270,7 +190,7 @@ export const clipshot = defineModule('clipshot', (module): undefined => {
     inject: { settings: Settings.token },
     execute: async (context: OperationContext, _args, { settings }): Promise<void> => {
       const config = loadConfiguration(settings);
-      const logger = filtered(context.logger, config.logLevel);
+      const logger = filterLogger(context.logger, config.logLevel);
       const outcome = await ensureSkipShellEntry(COMMANDS.PASTE_IMAGE, logger);
       const message = describeSkipShellOutcome(outcome);
       // Run by hand, so the result is reported whatever it is and whatever the
@@ -286,33 +206,28 @@ export const clipshot = defineModule('clipshot', (module): undefined => {
   });
 
   // Configuration is read where it is used, so nothing here caches it. What
-  // this service exists for is the two effects a change has outside a paste:
-  // the context key a `when` clause reads, and the warnings.
-  let subscription: { dispose(): void } | undefined;
+  // this service exists for is the one effect a change has outside a paste:
+  // the warnings.
   module.hostedServices.add({
     id: 'clipshot.configuration',
     inject: { settings: Settings.token },
-    start: async (context, { settings }) => {
-      const apply = async (): Promise<void> => {
+    start: (context, { settings }) => {
+      const apply = (): void => {
         const config = loadConfiguration(settings);
-        const logger = filtered(context.logger, config.logLevel);
-        warnAboutConfig(config, logger);
-        await publishContextKeys(config, logger);
+        warnAboutConfig(config, filterLogger(context.logger, config.logLevel));
       };
-      // Awaited here so the context key is set before activation reports done;
-      // `publishContextKeys` swallows its own failure, so this cannot reject.
-      await apply();
+      apply();
       // `onDidChange` fires for the section as a whole. Every key here feeds
-      // either the context key or the warnings, so there is nothing to filter
-      // on — `watch` per key would be sixteen subscriptions doing one job.
-      subscription = settings.onDidChange(() => {
+      // the warnings, so there is nothing to filter on — `watch` per key would
+      // be sixteen subscriptions doing one job.
+      const subscription = settings.onDidChange(() => {
         context.logger.info('Configuration updated');
-        void apply();
+        apply();
       });
-    },
-    stop: () => {
-      subscription?.dispose();
-      subscription = undefined;
+      // Released through the signal, which aborts however the application ends.
+      context.signal.addEventListener('abort', () => {
+        subscription.dispose();
+      });
     },
   });
 
@@ -321,11 +236,10 @@ export const clipshot = defineModule('clipshot', (module): undefined => {
   // contribution point for that list — the reasoning, and why this only started
   // mattering, is in src/terminal/skip-shell.ts. Activation is where the write
   // belongs: it is the last moment before a user reaches for the shortcut.
-  let terminalSubscription: { dispose(): void } | undefined;
   module.hostedServices.add({
     id: 'clipshot.terminalShortcut',
-    inject: { settings: Settings.token },
-    start: async (context, { settings }) => {
+    inject: { settings: Settings.token, notifications: Notifications },
+    start: async (context, { settings, notifications }) => {
       // Settled once the list has an answer in it. 'failed' is the one outcome
       // left unsettled: a settings.json that could not be written now may be
       // writable later, and a change event is a reasonable moment to retry.
@@ -335,31 +249,28 @@ export const clipshot = defineModule('clipshot', (module): undefined => {
         if (settled || !config.terminal.registerShortcut) {
           return;
         }
-        const logger = filtered(context.logger, config.logLevel);
+        const logger = filterLogger(context.logger, config.logLevel);
         const outcome = await ensureSkipShellEntry(COMMANDS.PASTE_IMAGE, logger);
         settled = outcome !== 'failed';
         if (outcome === 'added' && wants(config.notifications.level, 'success')) {
-          // A hosted service carries a logger and no UI — deliberately, since
-          // VS Code may be shutting down when one stops. Writing to a user's
-          // settings without telling them is the worse trade, so this is the
-          // second and last place the extension reaches for a VS Code API by
-          // hand. It fires once in the life of an installation.
-          announce(
-            Promise.resolve(vscode.window.showInformationMessage(describeSkipShellOutcome(outcome))),
-            logger
-          );
+          // Writing to a user's settings without telling them is the worse
+          // trade. It fires once in the life of an installation.
+          announce(notifications.info(describeSkipShellOutcome(outcome)), logger);
         }
       };
       await apply();
+      // Stopped while that ran: a subscription made now would outlive the stop.
+      if (context.signal.aborted) {
+        return;
+      }
       // Turning the setting on is a request, not a preference to note for next
       // time, so it is acted on when it happens rather than at the next start.
-      terminalSubscription = settings.onDidChange(() => {
+      const subscription = settings.onDidChange(() => {
         void apply();
       });
-    },
-    stop: () => {
-      terminalSubscription?.dispose();
-      terminalSubscription = undefined;
+      context.signal.addEventListener('abort', () => {
+        subscription.dispose();
+      });
     },
   });
 
