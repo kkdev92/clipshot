@@ -55,6 +55,20 @@ describe('PathGenerator', () => {
       expect(generator.generateFileName('img_${seq5}', 'png', date)).toBe('img_00001.png');
     });
 
+    it('should take the width of ${seq3} from clipshot.fileName.sequenceDigits', () => {
+      const date = new Date(2024, 0, 15, 14, 30, 45);
+
+      expect(generator.generateFileName('img_${seq3}', 'png', date, 5)).toBe('img_00001.png');
+      clearSequenceCache();
+      expect(generator.generateFileName('img_${seq3}', 'png', date, 1)).toBe('img_1.png');
+    });
+
+    it('should keep the width a token names other than 3, whatever the setting', () => {
+      const date = new Date(2024, 0, 15, 14, 30, 45);
+
+      expect(generator.generateFileName('img_${seq5}', 'png', date, 2)).toBe('img_00001.png');
+    });
+
     it('should add extension correctly', () => {
       const date = new Date(2024, 0, 15);
       expect(generator.generateFileName('image', 'png', date)).toBe('image.png');

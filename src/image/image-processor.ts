@@ -91,6 +91,8 @@ export function getSharpLoadError(): unknown {
  * Image processing options
  */
 export interface ImageProcessorOptions {
+  /** Width of `${seq3}` in the file name (default 3) */
+  sequenceDigits?: number;
   /** Output format */
   format: ImageFormat;
   /** JPEG quality (1-100) */
@@ -163,7 +165,12 @@ export class ImageProcessor {
     }
 
     // Generate file name
-    const fileName = this.pathGenerator.generateFileName(fileNamePattern, options.format);
+    const fileName = this.pathGenerator.generateFileName(
+      fileNamePattern,
+      options.format,
+      undefined,
+      options.sequenceDigits
+    );
 
     // Generate save path
     const savePath = this.pathGenerator.generateSavePath(saveDirectory, fileName);

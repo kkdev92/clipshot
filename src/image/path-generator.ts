@@ -4,7 +4,7 @@
  */
 
 import * as path from 'path';
-import { PATTERN_TOKENS, LIMITS } from '../core/constants';
+import { PATTERN_TOKENS, LIMITS, DEFAULTS } from '../core/constants';
 import { sanitizeFileName } from '../security/sanitizer';
 
 /**
@@ -91,16 +91,22 @@ export class PathGenerator {
    * @param pattern - The file name pattern with tokens
    * @param extension - The file extension (without dot)
    * @param date - Optional date for timestamps (defaults to now)
+   * @param sequenceDigits - Width of `${seq3}` (`clipshot.fileName.sequenceDigits`)
    * @returns Generated file name
    */
-  generateFileName(pattern: string, extension: string, date?: Date): string {
+  generateFileName(
+    pattern: string,
+    extension: string,
+    date?: Date,
+    sequenceDigits: number = DEFAULTS.SEQUENCE_DIGITS
+  ): string {
     const now = date ?? new Date();
 
     // Replace date/time tokens
     let result = this.replaceTimeTokens(pattern, now);
 
     // Replace sequence token
-    result = this.replaceSequenceToken(result, now);
+    result = this.replaceSequenceToken(result, now, sequenceDigits);
 
     // Sanitize the result
     result = sanitizeFileName(result);
@@ -126,15 +132,20 @@ export class PathGenerator {
   /**
    * Replace sequence token in pattern
    */
-  private replaceSequenceToken(pattern: string, date: Date): string {
+  private replaceSequenceToken(pattern: string, date: Date, sequenceDigits: number): string {
     const match = pattern.match(PATTERN_TOKENS.SEQUENCE);
     if (!match) {
       return pattern;
     }
 
-    // Get digit count from pattern
+    // Get digit count from pattern. `${seq3}` is the token the settings
+    // document, and its width is `clipshot.fileName.sequenceDigits`; a token
+    // that names another width keeps it.
     const digitCountStr = match[1];
     let digitCount = digitCountStr ? parseInt(digitCountStr, 10) : 3;
+    if (digitCount === 3) {
+      digitCount = sequenceDigits;
+    }
 
     // Clamp to valid range
     digitCount = Math.max(LIMITS.MIN_SEQUENCE_DIGITS, Math.min(LIMITS.MAX_SEQUENCE_DIGITS, digitCount));

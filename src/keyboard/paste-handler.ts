@@ -220,6 +220,7 @@ export class PasteHandler {
         config.saveDirectory,
         config.fileName.pattern,
         {
+          sequenceDigits: config.fileName.sequenceDigits,
           format: config.output.format,
           jpegQuality: config.output.jpegQuality,
           webpQuality: config.output.webpQuality,

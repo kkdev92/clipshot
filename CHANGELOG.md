@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   never in the middle of a character. The limit counted UTF-16 units, so a long
   name in a non-Latin script could exceed what Linux and macOS file systems
   allow, and a cut through an emoji left half of it in the name.
+- `clipshot.fileName.sequenceDigits` sets the width of `${seq3}`, as the
+  settings describe. The value was read and checked but never used, so the
+  number always had three digits.
 
 ## [0.9.2] - 2026-10-04
 

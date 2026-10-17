@@ -267,6 +267,22 @@ describe('PasteHandler', () => {
       expect(mockLogger.info).toHaveBeenCalledWith('Image saved', expect.any(Object));
     });
 
+    it('should pass clipshot.fileName.sequenceDigits to the image processor', async () => {
+      const config = createMockConfig({
+        fileName: { pattern: 'image_${seq3}', sequenceDigits: 5 },
+      });
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, createMockProcessedImage());
+
+      await handler.handlePaste(config, mockLogger);
+
+      expect(mockImageProcessor.processAndSave).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        '.clipshot',
+        'image_${seq3}',
+        expect.objectContaining({ sequenceDigits: 5 })
+      );
+    });
+
     it('should insert text in active editor when available', async () => {
       const config = createMockConfig();
       const processedImage = createMockProcessedImage();
