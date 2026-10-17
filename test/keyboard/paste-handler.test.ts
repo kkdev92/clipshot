@@ -222,7 +222,9 @@ describe('PasteHandler', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('folder');
-      expect(mockClipboardManager.cleanup).toHaveBeenCalled();
+      // Nothing is set up to read the clipboard, so nothing is cleaned up
+      expect(getClipboardManager).not.toHaveBeenCalled();
+      expect(mockClipboardManager.cleanup).not.toHaveBeenCalled();
     });
 
     it('should return error when workspace folders array is empty', async () => {
@@ -276,6 +278,42 @@ describe('PasteHandler', () => {
       expect(result.processedImage).toEqual(processedImage);
       expect(mockImageProcessor.processAndSave).toHaveBeenCalled();
       expect(mockLogger.info).toHaveBeenCalledWith('Image saved', expect.any(Object));
+    });
+
+    it('should report a failure to set up the clipboard as a failed paste, and paste the next time', async () => {
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, createMockProcessedImage());
+      vi.mocked(getClipboardManager).mockImplementationOnce(() => {
+        throw new Error('clipboard tool could not start');
+      });
+
+      const failed = await handler.handlePaste(createMockConfig(), mockLogger);
+
+      expect(failed.success).toBe(false);
+      expect(failed.error).toContain('clipboard tool could not start');
+      expect(handler.isCurrentlyProcessing()).toBe(false);
+      expect((await handler.handlePaste(createMockConfig(), mockLogger)).success).toBe(true);
+    });
+
+    it('should keep a saved image a success when cleaning up the clipboard fails', async () => {
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, createMockProcessedImage());
+      mockClipboardManager.cleanup.mockRejectedValue(new Error('temp file is locked'));
+
+      const result = await handler.handlePaste(createMockConfig(), mockLogger);
+
+      expect(result.success).toBe(true);
+      expect(mockClipboardManager.cleanup).toHaveBeenCalledTimes(1);
+      expect(mockLogger.warn).toHaveBeenCalledWith('Clipboard cleanup failed', expect.any(Object));
+    });
+
+    it('should report the read error, not the cleanup error, when both fail', async () => {
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, createMockProcessedImage());
+      mockClipboardManager.getImageData.mockRejectedValue(new Error('clipboard read failed'));
+      mockClipboardManager.cleanup.mockRejectedValue(new Error('temp file is locked'));
+
+      const result = await handler.handlePaste(createMockConfig(), mockLogger);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('clipboard read failed');
     });
 
     it('should pass clipshot.fileName.sequenceDigits to the image processor', async () => {

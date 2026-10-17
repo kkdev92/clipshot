@@ -250,7 +250,9 @@ export class PasteHandler {
     // The terminal the shortcut was pressed in, taken now, as the editor is:
     // by the time the image is saved the user may have moved to another one.
     const terminal = surface === 'terminal' ? vscode.window.activeTerminal : undefined;
-    const clipboardManager = getClipboardManager(logger);
+    // Set up inside the try, so that a failure to set it up is reported like
+    // any other failed paste
+    let clipboardManager: ReturnType<typeof getClipboardManager> | undefined;
 
     try {
       // Check if extension is enabled
@@ -264,6 +266,8 @@ export class PasteHandler {
       if (workspaceRoot === undefined || workspaceRoot === '') {
         throw new NoWorkspaceError();
       }
+
+      clipboardManager = getClipboardManager(logger);
 
       // Kick off the Sharp dynamic import now so the native module loads
       // while the clipboard subprocess runs (isSharpAvailable never rejects)
@@ -342,9 +346,6 @@ export class PasteHandler {
 
       const destination = await this.deliver(insertText, surface, config, editor, terminal, logger);
 
-      // Clean up clipboard manager
-      await clipboardManager.cleanup();
-
       return {
         success: true,
         processedImage,
@@ -352,9 +353,6 @@ export class PasteHandler {
         destination,
       };
     } catch (error) {
-      // Clean up on error
-      await clipboardManager.cleanup();
-
       // Handle known errors
       if (error instanceof NoImageError) {
         logger.debug('No image in clipboard, falling back to standard paste');
@@ -371,6 +369,14 @@ export class PasteHandler {
         success: false,
         error: message,
       };
+    } finally {
+      // Clean up clipboard manager, on success and on error. A failure here
+      // neither undoes a saved image nor replaces the error being reported.
+      try {
+        await clipboardManager?.cleanup();
+      } catch (error) {
+        logger.warn('Clipboard cleanup failed', toErrorFields(error));
+      }
     }
   }
 
