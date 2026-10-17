@@ -416,6 +416,49 @@ describe('PasteHandler', () => {
     });
   });
 
+  // A path relative to one workspace folder does not reach an image saved in
+  // another, so in a multi-root workspace the folder follows the document.
+  describe('handlePaste in a multi-root workspace', () => {
+    const first = { uri: { fsPath: '/first' }, name: 'first', index: 0 };
+    const second = { uri: { fsPath: '/second' }, name: 'second', index: 1 };
+
+    beforeEach(() => {
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, createMockProcessedImage());
+      (vscode.workspace as { workspaceFolders?: unknown[] }).workspaceFolders = [first, second];
+    });
+
+    it('saves into the folder that holds the document', async () => {
+      const editor = { ...createMockEditor('markdown'), document: { languageId: 'markdown', uri: { fsPath: '/second/notes.md' } } };
+      (vscode.window as { activeTextEditor?: unknown }).activeTextEditor = editor;
+      vi.mocked(vscode.workspace.getWorkspaceFolder).mockReturnValueOnce(second as never);
+
+      await handler.handlePaste(createMockConfig(), mockLogger);
+
+      expect(vscode.workspace.getWorkspaceFolder).toHaveBeenCalledWith(editor.document.uri);
+      expect(ImageProcessor).toHaveBeenCalledWith('/second', mockLogger);
+    });
+
+    it('takes the first folder for a document that is in none of them', async () => {
+      const editor = { ...createMockEditor('markdown'), document: { languageId: 'markdown', uri: { fsPath: '/elsewhere/notes.md' } } };
+      (vscode.window as { activeTextEditor?: unknown }).activeTextEditor = editor;
+
+      await handler.handlePaste(createMockConfig(), mockLogger);
+
+      expect(ImageProcessor).toHaveBeenCalledWith('/first', mockLogger);
+    });
+
+    it('takes the first folder for a terminal paste, without asking about the editor behind it', async () => {
+      const editor = { ...createMockEditor('markdown'), document: { languageId: 'markdown', uri: { fsPath: '/second/notes.md' } } };
+      (vscode.window as { activeTextEditor?: unknown }).activeTextEditor = editor;
+      (vscode.window as { activeTerminal?: unknown }).activeTerminal = createMockTerminal();
+
+      await handler.handlePaste(createMockConfig(), mockLogger, 'terminal');
+
+      expect(vscode.workspace.getWorkspaceFolder).not.toHaveBeenCalled();
+      expect(ImageProcessor).toHaveBeenCalledWith('/first', mockLogger);
+    });
+  });
+
   // Issue #69. VS Code has no runtime API for terminal focus, so the surface
   // arrives as an argument from the keybinding's `when` clause. Everything
   // here turns on the handler believing it rather than asking

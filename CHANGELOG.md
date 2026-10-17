@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   JPEG the clipboard gave, with the matching extension. The clipboard's bytes
   used to be saved under the extension of `clipshot.output.format` whatever
   they were, so a PNG could be named `.jpeg` or `.webp`.
+- In a multi-root workspace, the image is saved in the folder that holds the
+  file you paste into. It always went into the first folder, so a path inserted
+  into a file of another folder did not lead to it. A terminal paste still uses
+  the first folder.
 
 ## [0.9.2] - 2026-10-04
 

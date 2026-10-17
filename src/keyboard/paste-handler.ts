@@ -168,7 +168,7 @@ export class PasteHandler {
       }
 
       // Get workspace root
-      const workspaceRoot = this.getWorkspaceRoot();
+      const workspaceRoot = this.getWorkspaceRoot(editor);
       if (workspaceRoot === undefined || workspaceRoot === '') {
         throw new NoWorkspaceError();
       }
@@ -283,8 +283,20 @@ export class PasteHandler {
 
   /**
    * Get the workspace root path
+   *
+   * In a multi-root workspace, the folder that holds the document being
+   * pasted into: an image saved in the first folder is not where a path
+   * relative to another one can reach. A terminal paste, or a document in no
+   * folder, takes the first.
    */
-  private getWorkspaceRoot(): string | undefined {
+  private getWorkspaceRoot(editor: vscode.TextEditor | undefined): string | undefined {
+    if (editor !== undefined) {
+      const folder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+      if (folder !== undefined) {
+        return folder.uri.fsPath;
+      }
+    }
+
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (!workspaceFolders || workspaceFolders.length === 0) {
       return undefined;

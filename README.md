@@ -207,7 +207,7 @@ becomes token cost.
 | --- | --- | --- |
 | `clipshot.enabled` | `true` | Enable or disable the extension |
 | `clipshot.logLevel` | `info` | Floor for the *ClipShot* output channel. VS Code's own log level applies first — see [Troubleshooting](#troubleshooting) |
-| `clipshot.saveDirectory` | `.clipshot` | Where images go, relative to the workspace root |
+| `clipshot.saveDirectory` | `.clipshot` | Where images go, relative to the workspace root — in a multi-root workspace, the root of the folder holding the file you paste into |
 | `clipshot.fileName.pattern` | `image_${yyyy}${MM}${dd}_${HH}${mm}${ss}_${seq3}` | File name pattern |
 | `clipshot.fileName.sequenceDigits` | `3` | Width of `${seq3}`, 1–6 |
 | `clipshot.output.format` | `png` | `png` / `jpeg` / `webp` |
