@@ -3,6 +3,8 @@
  */
 
 import * as vscode from 'vscode';
+import * as path from 'path';
+import { pathToFileURL } from 'url';
 import type {
   ExtensionConfig,
   PasteResult,
@@ -63,15 +65,18 @@ function resolveAutoFormat(languageId?: string): 'path' | 'markdown' | 'html' {
 
 /**
  * Format the insert text based on configuration
+ *
+ * @param documentPath - The file the text goes into, when it is one; Markdown
+ *   and HTML point at the image from there
  */
 function formatInsertText(
   processedImage: ProcessedImage,
   format: InsertFormat,
   altSource: AltSource,
   altLiteral: string,
-  languageId?: string
+  languageId?: string,
+  documentPath?: string
 ): string {
-  const path = processedImage.relativePath;
   const alt = altSource === 'filename' ? processedImage.fileName : altLiteral;
 
   // Resolve auto format based on file type
@@ -81,13 +86,96 @@ function formatInsertText(
 
   switch (resolvedFormat) {
     case 'markdown':
-      return `![${alt}](${path})`;
-    case 'html':
-      return `<img src="${path}" alt="${alt}" />`;
+      return `![${escapeMarkdownText(alt)}](${linkTarget(processedImage, documentPath)})`;
+    case 'html': {
+      const src = linkTarget(processedImage, documentPath);
+      return `<img src="${escapeHtmlAttribute(src)}" alt="${escapeHtmlAttribute(alt)}" />`;
+    }
     case 'path':
     default:
-      return path;
+      return processedImage.relativePath;
   }
+}
+
+/**
+ * Where a Markdown or HTML reference points to reach the saved image
+ *
+ * Relative to the document, which is what such a link is resolved against: a
+ * path from the workspace root breaks in any file below the root. Without a
+ * document on disk there is only the workspace-relative path. Between two
+ * Windows drives there is no relative path at all, so the link is a file URL.
+ */
+function linkTarget(image: ProcessedImage, documentPath: string | undefined): string {
+  if (documentPath === undefined) {
+    return encodeLinkPath(image.relativePath);
+  }
+
+  const relative = path.relative(path.dirname(documentPath), image.absolutePath);
+  if (path.isAbsolute(relative)) {
+    return pathToFileURL(image.absolutePath).href;
+  }
+
+  const posix = relative.split(path.sep).join('/');
+  return encodeLinkPath(posix.startsWith('../') ? posix : `./${posix}`);
+}
+
+/**
+ * Percent-encode what a link cannot carry as it is
+ *
+ * Whitespace and control characters end a Markdown link destination, and so
+ * does a parenthesis without its pair; `<` and `>` delimit one, `&` starts a
+ * character reference, and `%`, `#` and `?` would be read as an escape, a
+ * fragment and a query. Everything else, non-ASCII included, is left readable.
+ */
+function encodeLinkPath(linkPath: string): string {
+  return linkPath.replace(/[\s\p{Cc}%#?()<>&]/gu, (character) => {
+    switch (character) {
+      case '(':
+        return '%28';
+      case ')':
+        return '%29';
+      default:
+        return encodeURIComponent(character);
+    }
+  });
+}
+
+/**
+ * Escape Markdown link text: the brackets that would end it early, and the
+ * backslash that escapes them. Other punctuation cannot break the image, and
+ * escaping it would scatter backslashes through every file name.
+ */
+function escapeMarkdownText(text: string): string {
+  return text.replace(/[\\[\]]/g, '\\$&');
+}
+
+/**
+ * Escape a value for an HTML attribute in double quotes
+ */
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * The path of the document being pasted into, when it is a file on disk
+ *
+ * An untitled document has no folder to be relative to, and one that is not a
+ * file — a Git revision, the user settings — is not where the reference will
+ * be read.
+ */
+function documentPathOf(editor: vscode.TextEditor | undefined): string | undefined {
+  const document = editor?.document;
+  if (document === undefined || document.isUntitled) {
+    return undefined;
+  }
+  // A remote workspace's files are paths on the remote machine, like the
+  // workspace folder the image is saved under
+  const scheme = document.uri.scheme;
+  return scheme === 'file' || scheme === 'vscode-remote' ? document.uri.fsPath : undefined;
 }
 
 /**
@@ -244,7 +332,8 @@ export class PasteHandler {
         config.insert.format,
         config.insert.altSource,
         config.insert.altLiteral,
-        editor?.document.languageId
+        editor?.document.languageId,
+        documentPathOf(editor)
       );
 
       const destination = await this.deliver(insertText, surface, config, editor, logger);

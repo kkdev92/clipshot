@@ -32,6 +32,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   file you paste into. It always went into the first folder, so a path inserted
   into a file of another folder did not lead to it. A terminal paste still uses
   the first folder.
+- Markdown and HTML references are relative to the file they are pasted into.
+  They were relative to the workspace root, so an image pasted into a file in a
+  subfolder, such as `docs/guide.md`, did not show. A file at the workspace
+  root gets the same reference as before, and the bare path is unchanged.
+- A space, a parenthesis, `#`, `%` or `?` in a Markdown or HTML path is
+  percent-encoded, and the alt text is escaped for Markdown or HTML. A save
+  directory such as `my shots` produced Markdown that did not render as an
+  image, and a `"` in `clipshot.insert.altLiteral` ended the HTML attribute.
 
 ## [0.9.2] - 2026-10-04
 

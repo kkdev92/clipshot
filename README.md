@@ -114,6 +114,12 @@ Set `clipshot.insert.format` to `path`, `markdown` or `html` to pin one instead.
 `clipshot.insert.altSource` decides what the alt text says: the file name, or
 the fixed string in `clipshot.insert.altLiteral`.
 
+The path in Markdown and HTML is relative to the file you paste into, so the
+image shows wherever that file sits; for a file on a different drive from the
+workspace, it is a `file:` URL. The bare path is relative to the workspace
+root, which is where a terminal usually starts. Characters a link cannot carry
+as they are, such as a space, a parenthesis or `#`, are percent-encoded.
+
 ### Where the Path Goes
 
 `Ctrl+Shift+V` puts the path wherever you pressed it:
