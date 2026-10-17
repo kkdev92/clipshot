@@ -40,6 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   percent-encoded, and the alt text is escaped for Markdown or HTML. A save
   directory such as `my shots` produced Markdown that did not render as an
   image, and a `"` in `clipshot.insert.altLiteral` ended the HTML attribute.
+- With a terminal focused, the path goes to the terminal the shortcut was
+  pressed in. Switching to another terminal while the image was being read
+  sent the path there. When that terminal is no longer the active one or has
+  exited, the path now goes to the clipboard — as it does when the terminal
+  cannot take the text, which used to fail the paste after the image was saved.
 
 ## [0.9.2] - 2026-10-04
 

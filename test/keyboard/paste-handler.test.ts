@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createMockLogger } from '@kkdev92/vscode-ext-kit/testing';
-import type { ExtensionConfig, ProcessedImage, Logger, ClipboardData } from '../../src/core/types';
+import type { ExtensionConfig, ProcessedImage, Logger, ClipboardData, PasteResult } from '../../src/core/types';
 
 // The vscode module is mocked globally in test/setup.ts.
 
@@ -695,6 +695,75 @@ describe('PasteHandler', () => {
       const [sent] = vi.mocked(terminal.sendText).mock.calls[0] as [string, boolean];
       expect(sent).not.toMatch(/[\r\n]/);
       expect(sent).toBe('"./shots rm -rf x/image_001.png"');
+    });
+
+    // The clipboard read takes long enough for the user to move on. Each case
+    // changes the terminals while it is still running.
+    describe('when the terminal changes during the paste', () => {
+      let terminal: ReturnType<typeof createMockTerminal> & { exitStatus?: { code: number } };
+      let finishRead: () => void;
+
+      beforeEach(() => {
+        arrangeSavedImage(mockClipboardManager, mockImageProcessor, createMockProcessedImage());
+        mockClipboardManager.getImageData.mockReturnValue(
+          new Promise((resolve) => {
+            finishRead = () => resolve(createMockClipboardData(true));
+          })
+        );
+        terminal = createMockTerminal();
+        (vscode.window as { activeTerminal?: unknown }).activeTerminal = terminal;
+      });
+
+      async function pasteWhile(change: () => void): Promise<PasteResult> {
+        const pending = handler.handlePaste(createMockConfig(), mockLogger, 'terminal');
+        await vi.waitFor(() => expect(mockClipboardManager.getImageData).toHaveBeenCalled());
+        change();
+        finishRead();
+        return pending;
+      }
+
+      it('does not follow the user into another terminal', async () => {
+        const other = createMockTerminal();
+
+        const result = await pasteWhile(() => {
+          (vscode.window as { activeTerminal?: unknown }).activeTerminal = other;
+        });
+
+        expect(result.destination).toBe('clipboard');
+        expect(terminal.sendText).not.toHaveBeenCalled();
+        expect(other.sendText).not.toHaveBeenCalled();
+        expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('./.clipshot/image_001.png');
+      });
+
+      it('does not type into a terminal whose process has exited', async () => {
+        const result = await pasteWhile(() => {
+          terminal.exitStatus = { code: 0 };
+        });
+
+        expect(result.destination).toBe('clipboard');
+        expect(terminal.sendText).not.toHaveBeenCalled();
+      });
+
+      it('falls back to the clipboard when the terminal was closed', async () => {
+        const result = await pasteWhile(() => {
+          (vscode.window as { activeTerminal?: unknown }).activeTerminal = undefined;
+        });
+
+        expect(result.destination).toBe('clipboard');
+        expect(terminal.sendText).not.toHaveBeenCalled();
+      });
+
+      it('reports the saved image, and uses the clipboard, when the terminal refuses the text', async () => {
+        terminal.sendText.mockImplementation(() => {
+          throw new Error('Terminal has already been disposed');
+        });
+
+        const result = await pasteWhile(() => undefined);
+
+        expect(result.success).toBe(true);
+        expect(result.destination).toBe('clipboard');
+        expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('./.clipshot/image_001.png');
+      });
     });
   });
 

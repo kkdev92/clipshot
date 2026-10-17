@@ -134,6 +134,10 @@ In a terminal there is no file type to read, so `auto` produces the bare path
 rather than Markdown or HTML. Pin `clipshot.insert.format` if you want a
 specific one there too. A path containing a space arrives quoted.
 
+The path goes to the terminal you pressed the shortcut in. If that terminal is
+no longer the active one by the time the image is saved — you switched to
+another, or it closed — the path goes to the clipboard instead.
+
 Set `clipshot.terminal.target` to `clipboard` if you would rather ClipShot did
 not write into whatever is running in your terminal; the path goes to the
 clipboard there as well. The image is saved either way.

@@ -19,6 +19,7 @@ import {
   NoImageError,
   NoWorkspaceError,
   getUserErrorMessage,
+  toErrorFields,
 } from '../core/errors';
 import { RESIZE_PRESETS } from '../core/constants';
 import { getClipboardManager } from '../clipboard/clipboard-manager';
@@ -246,6 +247,9 @@ export class PasteHandler {
     // still names a background editor — one that may not even be visible.
     // Touching it at all is the bug this branch exists to avoid.
     const editor = surface === 'terminal' ? undefined : vscode.window.activeTextEditor;
+    // The terminal the shortcut was pressed in, taken now, as the editor is:
+    // by the time the image is saved the user may have moved to another one.
+    const terminal = surface === 'terminal' ? vscode.window.activeTerminal : undefined;
     const clipboardManager = getClipboardManager(logger);
 
     try {
@@ -336,7 +340,7 @@ export class PasteHandler {
         documentPathOf(editor)
       );
 
-      const destination = await this.deliver(insertText, surface, config, editor, logger);
+      const destination = await this.deliver(insertText, surface, config, editor, terminal, logger);
 
       // Clean up clipboard manager
       await clipboardManager.cleanup();
@@ -405,10 +409,11 @@ export class PasteHandler {
     surface: PasteSurface,
     config: ExtensionConfig,
     editor: vscode.TextEditor | undefined,
+    terminal: vscode.Terminal | undefined,
     logger: Logger
   ): Promise<PasteDestination> {
     if (surface === 'terminal') {
-      if (config.terminal.target === 'terminal' && this.sendToTerminal(text, logger)) {
+      if (config.terminal.target === 'terminal' && this.sendToTerminal(text, terminal, logger)) {
         return 'terminal';
       }
     } else if (await this.insertText(text, editor)) {
@@ -428,21 +433,36 @@ export class PasteHandler {
   }
 
   /**
-   * Types the path into the focused terminal.
+   * Types the path into the terminal the shortcut was pressed in.
    *
+   * @param terminal - The active terminal when the paste started
    * @returns false when there is no terminal to type into, so the caller can
    *   fall back rather than dropping the path
    */
-  private sendToTerminal(text: string, logger: Logger): boolean {
-    const terminal = vscode.window.activeTerminal;
+  private sendToTerminal(text: string, terminal: vscode.Terminal | undefined, logger: Logger): boolean {
     if (!terminal) {
       logger.debug('Terminal has focus but no terminal is active; using the clipboard');
       return false;
     }
 
+    // Reading the clipboard and saving take a moment, in which the user can
+    // switch terminals or close this one. The path does not follow them into
+    // whichever terminal is active by then.
+    if (terminal !== vscode.window.activeTerminal || terminal.exitStatus !== undefined) {
+      logger.debug('The terminal the paste started in is no longer active; using the clipboard');
+      return false;
+    }
+
     // `false` is `shouldExecute`: no newline is appended, so the path is typed
     // and nothing runs until the user says so.
-    terminal.sendText(toTerminalLine(text), false);
+    try {
+      terminal.sendText(toTerminalLine(text), false);
+    } catch (error) {
+      // A terminal disposed of meanwhile throws rather than takes the text,
+      // and the image is saved by now
+      logger.warn('Could not type into the terminal; using the clipboard', toErrorFields(error));
+      return false;
+    }
     logger.debug('Path sent to the terminal');
     return true;
   }
