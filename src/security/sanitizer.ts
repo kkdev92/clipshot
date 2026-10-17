@@ -37,6 +37,31 @@ export function encodePowerShellCommand(script: string): string {
 }
 
 /**
+ * Shorten a string to at most `maxBytes` of UTF-8, whole characters only.
+ *
+ * Slicing by `length` counts UTF-16 units: it lets a name in a non-Latin
+ * script through at three bytes a character, and it can cut an emoji in half,
+ * leaving a lone surrogate, which UTF-8 cannot encode.
+ *
+ * @param value - The string to shorten
+ * @param maxBytes - The most UTF-8 bytes the result may take
+ * @returns The longest prefix of whole characters that fits
+ */
+export function truncateUtf8(value: string, maxBytes: number): string {
+  let result = '';
+  let bytes = 0;
+  for (const character of value) {
+    const size = Buffer.byteLength(character, 'utf8');
+    if (bytes + size > maxBytes) {
+      break;
+    }
+    result += character;
+    bytes += size;
+  }
+  return result;
+}
+
+/**
  * Sanitize a file name by removing dangerous characters
  * Works cross-platform
  *
@@ -72,16 +97,20 @@ export function sanitizeFileName(fileName: string): string {
     }
   }
 
-  // Truncate to max length
-  if (sanitized.length > LIMITS.MAX_FILE_NAME_LENGTH) {
+  // Truncate to max length, counted in UTF-8 bytes: Linux and macOS file
+  // systems limit a name in bytes, not in characters
+  if (Buffer.byteLength(sanitized, 'utf8') > LIMITS.MAX_FILE_NAME_LENGTH) {
     // Preserve extension if present
     const lastDot = sanitized.lastIndexOf('.');
     if (lastDot > 0 && lastDot > sanitized.length - 10) {
       const ext = sanitized.slice(lastDot);
-      const name = sanitized.slice(0, LIMITS.MAX_FILE_NAME_LENGTH - ext.length);
+      const name = truncateUtf8(
+        sanitized.slice(0, lastDot),
+        LIMITS.MAX_FILE_NAME_LENGTH - Buffer.byteLength(ext, 'utf8')
+      );
       sanitized = name + ext;
     } else {
-      sanitized = sanitized.slice(0, LIMITS.MAX_FILE_NAME_LENGTH);
+      sanitized = truncateUtf8(sanitized, LIMITS.MAX_FILE_NAME_LENGTH);
     }
   }
 

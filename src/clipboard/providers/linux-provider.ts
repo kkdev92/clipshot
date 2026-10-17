@@ -44,8 +44,11 @@ export class LinuxClipboardProvider extends BaseClipboardProvider {
   }
 
   private async detectEnvironment(): Promise<void> {
-    if (this.displayServer !== null) {
-      return; // Already detected
+    // Detected once a tool is found. Until then, look again each time: the
+    // missing tool may have been installed since, and the clipboard manager
+    // asks again for exactly that reason.
+    if (this.availableTool !== null) {
+      return;
     }
 
     // Detect display server

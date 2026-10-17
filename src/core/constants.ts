@@ -88,7 +88,7 @@ export const LIMITS = {
   MAX_WEBP_QUALITY: 100,
   MIN_FILE_SIZE_MB: 1,
   MAX_FILE_SIZE_MB: 100,
-  MAX_FILE_NAME_LENGTH: 200,
+  MAX_FILE_NAME_LENGTH: 200, // UTF-8 bytes, before the image extension is added
   MIN_IMAGE_DIMENSION: 1,
   MAX_IMAGE_DIMENSION: 16384,
 } as const;

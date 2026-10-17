@@ -17,6 +17,7 @@ import { describe, it, expect } from 'vitest';
 import {
   encodePowerShellCommand,
   sanitizeFileName,
+  truncateUtf8,
   containsDangerousChars,
   sanitizeDirectoryPath,
   escapeShellArg,
@@ -176,6 +177,23 @@ describe('sanitizer', () => {
         expect(result.length).toBeLessThanOrEqual(200);
         // Extension is not preserved because it's too far from the end
       });
+
+      it('should count the length in UTF-8 bytes, as Linux and macOS file systems do', () => {
+        // 100 kanji are 100 UTF-16 units but 300 bytes, more than the 255
+        // bytes ext4 or APFS allow in one name
+        const result = sanitizeFileName('画'.repeat(100) + '.png');
+
+        expect(result).toBe('画'.repeat(65) + '.png');
+        expect(Buffer.byteLength(result, 'utf8')).toBeLessThanOrEqual(200);
+      });
+
+      it('should not cut a character in half when shortening', () => {
+        // The emoji is two UTF-16 units, and the limit falls between them
+        const result = sanitizeFileName('a'.repeat(199) + '📷b');
+
+        expect(result).toBe('a'.repeat(199));
+        expect(() => encodeURIComponent(result)).not.toThrow();
+      });
     });
 
     /**
@@ -240,6 +258,29 @@ describe('sanitizer', () => {
           expect(result).toBe('PRN.png');
         }
       });
+    });
+  });
+
+  /**
+   * Tests for shortening by UTF-8 bytes
+   *
+   * File names are limited in bytes on Linux and macOS, so a name is shortened
+   * by its UTF-8 length — and only between characters, never inside one.
+   */
+  describe('truncateUtf8', () => {
+    it('should return a string that already fits unchanged', () => {
+      expect(truncateUtf8('image_001', 9)).toBe('image_001');
+    });
+
+    it('should stop before a multi-byte character that does not fit', () => {
+      // Each kanji is 3 bytes: two fit in 7, the third would need 9
+      expect(truncateUtf8('画像集', 7)).toBe('画像');
+    });
+
+    it('should keep or drop a surrogate pair as a whole', () => {
+      // The emoji is 4 bytes in UTF-8 and two units in UTF-16
+      expect(truncateUtf8('a📷', 4)).toBe('a');
+      expect(truncateUtf8('a📷', 5)).toBe('a📷');
     });
   });
 

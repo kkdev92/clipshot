@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Saving never replaces an image that is already there. When the name is
+  taken, `${seq3}` moves on to the next free number, a pattern without it gets
+  `_1`, `_2`, … before the extension, and the path inserted is the name
+  actually saved. The new image used to be renamed over the old one: the
+  sequence number starts again at 1 every second, so with a pattern without
+  `${ss}`, such as `notes_${seq3}`, each paste in a later second replaced the
+  image before it. Two windows saving in the same second could do the same with
+  the default pattern.
+- A file name longer than the limit is shortened by its length in bytes, and
+  never in the middle of a character. The limit counted UTF-16 units, so a long
+  name in a non-Latin script could exceed what Linux and macOS file systems
+  allow, and a cut through an emoji left half of it in the name.
+- `clipshot.fileName.sequenceDigits` sets the width of `${seq3}`, as the
+  settings describe. The value was read and checked but never used, so the
+  number always had three digits.
+- When the bundled `sharp` binary cannot load, the image is saved as the PNG or
+  JPEG the clipboard gave, with the matching extension. The clipboard's bytes
+  used to be saved under the extension of `clipshot.output.format` whatever
+  they were, so a PNG could be named `.jpeg` or `.webp`.
+- In a multi-root workspace, the image is saved in the folder that holds the
+  file you paste into. It always went into the first folder, so a path inserted
+  into a file of another folder did not lead to it. A terminal paste still uses
+  the first folder.
+- Markdown and HTML references are relative to the file they are pasted into.
+  They were relative to the workspace root, so an image pasted into a file in a
+  subfolder, such as `docs/guide.md`, did not show. A file at the workspace
+  root gets the same reference as before, and the bare path is unchanged.
+- A space, a parenthesis, `#`, `%` or `?` in a Markdown or HTML path is
+  percent-encoded, and the alt text is escaped for Markdown or HTML. A save
+  directory such as `my shots` produced Markdown that did not render as an
+  image, and a `"` in `clipshot.insert.altLiteral` ended the HTML attribute.
+- With a terminal focused, the path goes to the terminal the shortcut was
+  pressed in. Switching to another terminal while the image was being read
+  sent the path there. When that terminal is no longer the active one or has
+  exited, the path now goes to the clipboard — as it does when the terminal
+  cannot take the text, which used to fail the paste after the image was saved.
+- On Linux, `xclip` or `wl-clipboard` installed after a paste that found
+  neither is picked up by the next paste. Until the window was reloaded, every
+  paste reported the clipboard as unavailable.
+
 ## [0.9.2] - 2026-10-04
 
 ### Changed

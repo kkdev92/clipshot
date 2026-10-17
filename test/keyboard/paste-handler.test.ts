@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createMockLogger } from '@kkdev92/vscode-ext-kit/testing';
-import type { ExtensionConfig, ProcessedImage, Logger, ClipboardData } from '../../src/core/types';
+import type { ExtensionConfig, ProcessedImage, Logger, ClipboardData, PasteResult } from '../../src/core/types';
 
 // The vscode module is mocked globally in test/setup.ts.
 
@@ -83,14 +83,25 @@ function arrangeSavedImage(
   processor.processAndSave.mockResolvedValue(processedImage);
 }
 
+/** A document saved at `fsPath`, as far as the handler reads one. */
+function createMockDocument(
+  languageId: string,
+  fsPath: string = '/workspace/notes.md'
+): { languageId: string; uri: { scheme: string; fsPath: string }; isUntitled: boolean } {
+  return { languageId, uri: { scheme: 'file', fsPath }, isUntitled: false };
+}
+
 /** An editor that records whether anything tried to write into it. */
-function createMockEditor(languageId: string): {
-  document: { languageId: string };
+function createMockEditor(
+  languageId: string,
+  fsPath?: string
+): {
+  document: ReturnType<typeof createMockDocument>;
   selections: unknown[];
   edit: ReturnType<typeof vi.fn>;
 } {
   return {
-    document: { languageId },
+    document: createMockDocument(languageId, fsPath),
     selections: [{ isEmpty: true, active: { line: 0, character: 0 } }],
     edit: vi.fn().mockResolvedValue(true),
   };
@@ -211,7 +222,9 @@ describe('PasteHandler', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('folder');
-      expect(mockClipboardManager.cleanup).toHaveBeenCalled();
+      // Nothing is set up to read the clipboard, so nothing is cleaned up
+      expect(getClipboardManager).not.toHaveBeenCalled();
+      expect(mockClipboardManager.cleanup).not.toHaveBeenCalled();
     });
 
     it('should return error when workspace folders array is empty', async () => {
@@ -267,6 +280,58 @@ describe('PasteHandler', () => {
       expect(mockLogger.info).toHaveBeenCalledWith('Image saved', expect.any(Object));
     });
 
+    it('should report a failure to set up the clipboard as a failed paste, and paste the next time', async () => {
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, createMockProcessedImage());
+      vi.mocked(getClipboardManager).mockImplementationOnce(() => {
+        throw new Error('clipboard tool could not start');
+      });
+
+      const failed = await handler.handlePaste(createMockConfig(), mockLogger);
+
+      expect(failed.success).toBe(false);
+      expect(failed.error).toContain('clipboard tool could not start');
+      expect(handler.isCurrentlyProcessing()).toBe(false);
+      expect((await handler.handlePaste(createMockConfig(), mockLogger)).success).toBe(true);
+    });
+
+    it('should keep a saved image a success when cleaning up the clipboard fails', async () => {
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, createMockProcessedImage());
+      mockClipboardManager.cleanup.mockRejectedValue(new Error('temp file is locked'));
+
+      const result = await handler.handlePaste(createMockConfig(), mockLogger);
+
+      expect(result.success).toBe(true);
+      expect(mockClipboardManager.cleanup).toHaveBeenCalledTimes(1);
+      expect(mockLogger.warn).toHaveBeenCalledWith('Clipboard cleanup failed', expect.any(Object));
+    });
+
+    it('should report the read error, not the cleanup error, when both fail', async () => {
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, createMockProcessedImage());
+      mockClipboardManager.getImageData.mockRejectedValue(new Error('clipboard read failed'));
+      mockClipboardManager.cleanup.mockRejectedValue(new Error('temp file is locked'));
+
+      const result = await handler.handlePaste(createMockConfig(), mockLogger);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('clipboard read failed');
+    });
+
+    it('should pass clipshot.fileName.sequenceDigits to the image processor', async () => {
+      const config = createMockConfig({
+        fileName: { pattern: 'image_${seq3}', sequenceDigits: 5 },
+      });
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, createMockProcessedImage());
+
+      await handler.handlePaste(config, mockLogger);
+
+      expect(mockImageProcessor.processAndSave).toHaveBeenCalledWith(
+        expect.any(Buffer),
+        '.clipshot',
+        'image_${seq3}',
+        expect.objectContaining({ sequenceDigits: 5 })
+      );
+    });
+
     it('should insert text in active editor when available', async () => {
       const config = createMockConfig();
       const processedImage = createMockProcessedImage();
@@ -284,7 +349,7 @@ describe('PasteHandler', () => {
         replace: vi.fn(),
       };
       const mockEditor = {
-        document: { languageId: 'markdown' },
+        document: createMockDocument('markdown'),
         selections: [{ isEmpty: true, active: { line: 0, character: 0 } }],
         edit: vi.fn((callback: (builder: typeof mockEditBuilder) => void) => {
           callback(mockEditBuilder);
@@ -318,7 +383,7 @@ describe('PasteHandler', () => {
         replace: vi.fn(),
       };
       const mockEditor = {
-        document: { languageId: 'typescript' },
+        document: createMockDocument('typescript'),
         selections: [{ isEmpty: false, start: { line: 0, character: 0 }, end: { line: 0, character: 5 } }],
         edit: vi.fn((callback: (builder: typeof mockEditBuilder) => void) => {
           callback(mockEditBuilder);
@@ -346,7 +411,7 @@ describe('PasteHandler', () => {
 
       // Setup active editor that fails to edit
       const mockEditor = {
-        document: { languageId: 'markdown' },
+        document: createMockDocument('markdown'),
         selections: [{ isEmpty: true, active: { line: 0, character: 0 } }],
         edit: vi.fn().mockRejectedValue(new Error('Edit failed')),
       };
@@ -397,6 +462,134 @@ describe('PasteHandler', () => {
       expect(result.destination).toBe('clipboard');
       expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('./.clipshot/image_001.png');
       expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
+    });
+  });
+
+  // A path relative to one workspace folder does not reach an image saved in
+  // another, so in a multi-root workspace the folder follows the document.
+  describe('handlePaste in a multi-root workspace', () => {
+    const first = { uri: { fsPath: '/first' }, name: 'first', index: 0 };
+    const second = { uri: { fsPath: '/second' }, name: 'second', index: 1 };
+
+    beforeEach(() => {
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, createMockProcessedImage());
+      (vscode.workspace as { workspaceFolders?: unknown[] }).workspaceFolders = [first, second];
+    });
+
+    it('saves into the folder that holds the document', async () => {
+      const editor = createMockEditor('markdown', '/second/notes.md');
+      (vscode.window as { activeTextEditor?: unknown }).activeTextEditor = editor;
+      vi.mocked(vscode.workspace.getWorkspaceFolder).mockReturnValueOnce(second as never);
+
+      await handler.handlePaste(createMockConfig(), mockLogger);
+
+      expect(vscode.workspace.getWorkspaceFolder).toHaveBeenCalledWith(editor.document.uri);
+      expect(ImageProcessor).toHaveBeenCalledWith('/second', mockLogger);
+    });
+
+    it('takes the first folder for a document that is in none of them', async () => {
+      const editor = createMockEditor('markdown', '/elsewhere/notes.md');
+      (vscode.window as { activeTextEditor?: unknown }).activeTextEditor = editor;
+
+      await handler.handlePaste(createMockConfig(), mockLogger);
+
+      expect(ImageProcessor).toHaveBeenCalledWith('/first', mockLogger);
+    });
+
+    it('takes the first folder for a terminal paste, without asking about the editor behind it', async () => {
+      const editor = createMockEditor('markdown', '/second/notes.md');
+      (vscode.window as { activeTextEditor?: unknown }).activeTextEditor = editor;
+      (vscode.window as { activeTerminal?: unknown }).activeTerminal = createMockTerminal();
+
+      await handler.handlePaste(createMockConfig(), mockLogger, 'terminal');
+
+      expect(vscode.workspace.getWorkspaceFolder).not.toHaveBeenCalled();
+      expect(ImageProcessor).toHaveBeenCalledWith('/first', mockLogger);
+    });
+  });
+
+  // A Markdown or HTML link is resolved against the file it is in, so the path
+  // is written from there. The image here is /workspace/.clipshot/image_001.png.
+  describe('references to the saved image', () => {
+    async function pasteInto(
+      document: ReturnType<typeof createMockDocument>,
+      overrides: Partial<ExtensionConfig> = {},
+      processedImage: ProcessedImage = createMockProcessedImage()
+    ): Promise<string | undefined> {
+      arrangeSavedImage(mockClipboardManager, mockImageProcessor, processedImage);
+      (vscode.window as { activeTextEditor?: unknown }).activeTextEditor = {
+        ...createMockEditor(document.languageId),
+        document,
+      };
+      const result = await handler.handlePaste(createMockConfig(overrides), mockLogger);
+      return result.insertedText;
+    }
+
+    it('writes the same reference as before for a file at the workspace root', async () => {
+      expect(await pasteInto(createMockDocument('markdown', '/workspace/README.md'))).toBe(
+        '![image_001.png](./.clipshot/image_001.png)'
+      );
+    });
+
+    it('points up from a file in a subfolder', async () => {
+      expect(await pasteInto(createMockDocument('markdown', '/workspace/docs/guide.md'))).toBe(
+        '![image_001.png](../.clipshot/image_001.png)'
+      );
+      expect(await pasteInto(createMockDocument('html', '/workspace/docs/index.html'))).toBe(
+        '<img src="../.clipshot/image_001.png" alt="image_001.png" />'
+      );
+    });
+
+    it('keeps the bare path relative to the workspace root', async () => {
+      const document = createMockDocument('typescript', '/workspace/src/notes.ts');
+
+      expect(await pasteInto(document)).toBe('./.clipshot/image_001.png');
+    });
+
+    it('uses the workspace-relative path for an untitled document', async () => {
+      const document = { ...createMockDocument('markdown', 'Untitled-1'), isUntitled: true };
+
+      expect(await pasteInto(document)).toBe('![image_001.png](./.clipshot/image_001.png)');
+    });
+
+    it('percent-encodes what a link cannot carry, and leaves other characters as they are', async () => {
+      const processedImage = {
+        ...createMockProcessedImage(),
+        absolutePath: '/workspace/my shots/画像 (1)#2%.png',
+        relativePath: './my shots/画像 (1)#2%.png',
+        fileName: '画像 (1)#2%.png',
+      };
+
+      expect(await pasteInto(createMockDocument('markdown', '/workspace/README.md'), {}, processedImage)).toBe(
+        '![画像 (1)#2%.png](./my%20shots/画像%20%281%29%232%25.png)'
+      );
+    });
+
+    it('escapes brackets and backslashes in Markdown alt text, and nothing else', async () => {
+      const insert = { format: 'auto' as const, altSource: 'literal' as const, altLiteral: 'a [b] \\ c_d*e' };
+
+      expect(await pasteInto(createMockDocument('markdown', '/workspace/README.md'), { insert })).toBe(
+        '![a \\[b\\] \\\\ c_d*e](./.clipshot/image_001.png)'
+      );
+    });
+
+    it('escapes quotes, ampersands and angle brackets in HTML attributes', async () => {
+      const insert = { format: 'auto' as const, altSource: 'literal' as const, altLiteral: '"x" & <y>' };
+
+      expect(await pasteInto(createMockDocument('html', '/workspace/index.html'), { insert })).toBe(
+        '<img src="./.clipshot/image_001.png" alt="&quot;x&quot; &amp; &lt;y&gt;" />'
+      );
+    });
+
+    it.skipIf(process.platform !== 'win32')('links a file on another drive with a file URL', async () => {
+      const processedImage = {
+        ...createMockProcessedImage(),
+        absolutePath: 'C:\\workspace\\.clipshot\\image_001.png',
+      };
+
+      expect(await pasteInto(createMockDocument('markdown', 'D:\\notes\\guide.md'), {}, processedImage)).toBe(
+        '![image_001.png](file:///C:/workspace/.clipshot/image_001.png)'
+      );
     });
   });
 
@@ -540,6 +733,75 @@ describe('PasteHandler', () => {
       const [sent] = vi.mocked(terminal.sendText).mock.calls[0] as [string, boolean];
       expect(sent).not.toMatch(/[\r\n]/);
       expect(sent).toBe('"./shots rm -rf x/image_001.png"');
+    });
+
+    // The clipboard read takes long enough for the user to move on. Each case
+    // changes the terminals while it is still running.
+    describe('when the terminal changes during the paste', () => {
+      let terminal: ReturnType<typeof createMockTerminal> & { exitStatus?: { code: number } };
+      let finishRead: () => void;
+
+      beforeEach(() => {
+        arrangeSavedImage(mockClipboardManager, mockImageProcessor, createMockProcessedImage());
+        mockClipboardManager.getImageData.mockReturnValue(
+          new Promise((resolve) => {
+            finishRead = () => resolve(createMockClipboardData(true));
+          })
+        );
+        terminal = createMockTerminal();
+        (vscode.window as { activeTerminal?: unknown }).activeTerminal = terminal;
+      });
+
+      async function pasteWhile(change: () => void): Promise<PasteResult> {
+        const pending = handler.handlePaste(createMockConfig(), mockLogger, 'terminal');
+        await vi.waitFor(() => expect(mockClipboardManager.getImageData).toHaveBeenCalled());
+        change();
+        finishRead();
+        return pending;
+      }
+
+      it('does not follow the user into another terminal', async () => {
+        const other = createMockTerminal();
+
+        const result = await pasteWhile(() => {
+          (vscode.window as { activeTerminal?: unknown }).activeTerminal = other;
+        });
+
+        expect(result.destination).toBe('clipboard');
+        expect(terminal.sendText).not.toHaveBeenCalled();
+        expect(other.sendText).not.toHaveBeenCalled();
+        expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('./.clipshot/image_001.png');
+      });
+
+      it('does not type into a terminal whose process has exited', async () => {
+        const result = await pasteWhile(() => {
+          terminal.exitStatus = { code: 0 };
+        });
+
+        expect(result.destination).toBe('clipboard');
+        expect(terminal.sendText).not.toHaveBeenCalled();
+      });
+
+      it('falls back to the clipboard when the terminal was closed', async () => {
+        const result = await pasteWhile(() => {
+          (vscode.window as { activeTerminal?: unknown }).activeTerminal = undefined;
+        });
+
+        expect(result.destination).toBe('clipboard');
+        expect(terminal.sendText).not.toHaveBeenCalled();
+      });
+
+      it('reports the saved image, and uses the clipboard, when the terminal refuses the text', async () => {
+        terminal.sendText.mockImplementation(() => {
+          throw new Error('Terminal has already been disposed');
+        });
+
+        const result = await pasteWhile(() => undefined);
+
+        expect(result.success).toBe(true);
+        expect(result.destination).toBe('clipboard');
+        expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('./.clipshot/image_001.png');
+      });
     });
   });
 

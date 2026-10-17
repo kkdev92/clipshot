@@ -3,6 +3,8 @@
  */
 
 import * as vscode from 'vscode';
+import * as path from 'path';
+import { pathToFileURL } from 'url';
 import type {
   ExtensionConfig,
   PasteResult,
@@ -17,6 +19,7 @@ import {
   NoImageError,
   NoWorkspaceError,
   getUserErrorMessage,
+  toErrorFields,
 } from '../core/errors';
 import { RESIZE_PRESETS } from '../core/constants';
 import { getClipboardManager } from '../clipboard/clipboard-manager';
@@ -63,15 +66,18 @@ function resolveAutoFormat(languageId?: string): 'path' | 'markdown' | 'html' {
 
 /**
  * Format the insert text based on configuration
+ *
+ * @param documentPath - The file the text goes into, when it is one; Markdown
+ *   and HTML point at the image from there
  */
 function formatInsertText(
   processedImage: ProcessedImage,
   format: InsertFormat,
   altSource: AltSource,
   altLiteral: string,
-  languageId?: string
+  languageId?: string,
+  documentPath?: string
 ): string {
-  const path = processedImage.relativePath;
   const alt = altSource === 'filename' ? processedImage.fileName : altLiteral;
 
   // Resolve auto format based on file type
@@ -81,13 +87,96 @@ function formatInsertText(
 
   switch (resolvedFormat) {
     case 'markdown':
-      return `![${alt}](${path})`;
-    case 'html':
-      return `<img src="${path}" alt="${alt}" />`;
+      return `![${escapeMarkdownText(alt)}](${linkTarget(processedImage, documentPath)})`;
+    case 'html': {
+      const src = linkTarget(processedImage, documentPath);
+      return `<img src="${escapeHtmlAttribute(src)}" alt="${escapeHtmlAttribute(alt)}" />`;
+    }
     case 'path':
     default:
-      return path;
+      return processedImage.relativePath;
   }
+}
+
+/**
+ * Where a Markdown or HTML reference points to reach the saved image
+ *
+ * Relative to the document, which is what such a link is resolved against: a
+ * path from the workspace root breaks in any file below the root. Without a
+ * document on disk there is only the workspace-relative path. Between two
+ * Windows drives there is no relative path at all, so the link is a file URL.
+ */
+function linkTarget(image: ProcessedImage, documentPath: string | undefined): string {
+  if (documentPath === undefined) {
+    return encodeLinkPath(image.relativePath);
+  }
+
+  const relative = path.relative(path.dirname(documentPath), image.absolutePath);
+  if (path.isAbsolute(relative)) {
+    return pathToFileURL(image.absolutePath).href;
+  }
+
+  const posix = relative.split(path.sep).join('/');
+  return encodeLinkPath(posix.startsWith('../') ? posix : `./${posix}`);
+}
+
+/**
+ * Percent-encode what a link cannot carry as it is
+ *
+ * Whitespace and control characters end a Markdown link destination, and so
+ * does a parenthesis without its pair; `<` and `>` delimit one, `&` starts a
+ * character reference, and `%`, `#` and `?` would be read as an escape, a
+ * fragment and a query. Everything else, non-ASCII included, is left readable.
+ */
+function encodeLinkPath(linkPath: string): string {
+  return linkPath.replace(/[\s\p{Cc}%#?()<>&]/gu, (character) => {
+    switch (character) {
+      case '(':
+        return '%28';
+      case ')':
+        return '%29';
+      default:
+        return encodeURIComponent(character);
+    }
+  });
+}
+
+/**
+ * Escape Markdown link text: the brackets that would end it early, and the
+ * backslash that escapes them. Other punctuation cannot break the image, and
+ * escaping it would scatter backslashes through every file name.
+ */
+function escapeMarkdownText(text: string): string {
+  return text.replace(/[\\[\]]/g, '\\$&');
+}
+
+/**
+ * Escape a value for an HTML attribute in double quotes
+ */
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * The path of the document being pasted into, when it is a file on disk
+ *
+ * An untitled document has no folder to be relative to, and one that is not a
+ * file — a Git revision, the user settings — is not where the reference will
+ * be read.
+ */
+function documentPathOf(editor: vscode.TextEditor | undefined): string | undefined {
+  const document = editor?.document;
+  if (document === undefined || document.isUntitled) {
+    return undefined;
+  }
+  // A remote workspace's files are paths on the remote machine, like the
+  // workspace folder the image is saved under
+  const scheme = document.uri.scheme;
+  return scheme === 'file' || scheme === 'vscode-remote' ? document.uri.fsPath : undefined;
 }
 
 /**
@@ -158,7 +247,12 @@ export class PasteHandler {
     // still names a background editor — one that may not even be visible.
     // Touching it at all is the bug this branch exists to avoid.
     const editor = surface === 'terminal' ? undefined : vscode.window.activeTextEditor;
-    const clipboardManager = getClipboardManager(logger);
+    // The terminal the shortcut was pressed in, taken now, as the editor is:
+    // by the time the image is saved the user may have moved to another one.
+    const terminal = surface === 'terminal' ? vscode.window.activeTerminal : undefined;
+    // Set up inside the try, so that a failure to set it up is reported like
+    // any other failed paste
+    let clipboardManager: ReturnType<typeof getClipboardManager> | undefined;
 
     try {
       // Check if extension is enabled
@@ -168,10 +262,12 @@ export class PasteHandler {
       }
 
       // Get workspace root
-      const workspaceRoot = this.getWorkspaceRoot();
+      const workspaceRoot = this.getWorkspaceRoot(editor);
       if (workspaceRoot === undefined || workspaceRoot === '') {
         throw new NoWorkspaceError();
       }
+
+      clipboardManager = getClipboardManager(logger);
 
       // Kick off the Sharp dynamic import now so the native module loads
       // while the clipboard subprocess runs (isSharpAvailable never rejects)
@@ -198,7 +294,7 @@ export class PasteHandler {
       const sharpAvailable = await sharpAvailablePromise;
       if (!sharpAvailable) {
         const loadError = getSharpLoadError();
-        logger.warn('Sharp is not available - resize will be skipped');
+        logger.warn('Sharp is not available - resize and format conversion will be skipped');
         if (loadError !== null && loadError !== undefined) {
           logger.error('Sharp failed to load', loadError, { context: 'sharp-load' });
         }
@@ -220,6 +316,7 @@ export class PasteHandler {
         config.saveDirectory,
         config.fileName.pattern,
         {
+          sequenceDigits: config.fileName.sequenceDigits,
           format: config.output.format,
           jpegQuality: config.output.jpegQuality,
           webpQuality: config.output.webpQuality,
@@ -243,13 +340,11 @@ export class PasteHandler {
         config.insert.format,
         config.insert.altSource,
         config.insert.altLiteral,
-        editor?.document.languageId
+        editor?.document.languageId,
+        documentPathOf(editor)
       );
 
-      const destination = await this.deliver(insertText, surface, config, editor, logger);
-
-      // Clean up clipboard manager
-      await clipboardManager.cleanup();
+      const destination = await this.deliver(insertText, surface, config, editor, terminal, logger);
 
       return {
         success: true,
@@ -258,9 +353,6 @@ export class PasteHandler {
         destination,
       };
     } catch (error) {
-      // Clean up on error
-      await clipboardManager.cleanup();
-
       // Handle known errors
       if (error instanceof NoImageError) {
         logger.debug('No image in clipboard, falling back to standard paste');
@@ -277,13 +369,33 @@ export class PasteHandler {
         success: false,
         error: message,
       };
+    } finally {
+      // Clean up clipboard manager, on success and on error. A failure here
+      // neither undoes a saved image nor replaces the error being reported.
+      try {
+        await clipboardManager?.cleanup();
+      } catch (error) {
+        logger.warn('Clipboard cleanup failed', toErrorFields(error));
+      }
     }
   }
 
   /**
    * Get the workspace root path
+   *
+   * In a multi-root workspace, the folder that holds the document being
+   * pasted into: an image saved in the first folder is not where a path
+   * relative to another one can reach. A terminal paste, or a document in no
+   * folder, takes the first.
    */
-  private getWorkspaceRoot(): string | undefined {
+  private getWorkspaceRoot(editor: vscode.TextEditor | undefined): string | undefined {
+    if (editor !== undefined) {
+      const folder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+      if (folder !== undefined) {
+        return folder.uri.fsPath;
+      }
+    }
+
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (!workspaceFolders || workspaceFolders.length === 0) {
       return undefined;
@@ -303,10 +415,11 @@ export class PasteHandler {
     surface: PasteSurface,
     config: ExtensionConfig,
     editor: vscode.TextEditor | undefined,
+    terminal: vscode.Terminal | undefined,
     logger: Logger
   ): Promise<PasteDestination> {
     if (surface === 'terminal') {
-      if (config.terminal.target === 'terminal' && this.sendToTerminal(text, logger)) {
+      if (config.terminal.target === 'terminal' && this.sendToTerminal(text, terminal, logger)) {
         return 'terminal';
       }
     } else if (await this.insertText(text, editor)) {
@@ -326,21 +439,36 @@ export class PasteHandler {
   }
 
   /**
-   * Types the path into the focused terminal.
+   * Types the path into the terminal the shortcut was pressed in.
    *
+   * @param terminal - The active terminal when the paste started
    * @returns false when there is no terminal to type into, so the caller can
    *   fall back rather than dropping the path
    */
-  private sendToTerminal(text: string, logger: Logger): boolean {
-    const terminal = vscode.window.activeTerminal;
+  private sendToTerminal(text: string, terminal: vscode.Terminal | undefined, logger: Logger): boolean {
     if (!terminal) {
       logger.debug('Terminal has focus but no terminal is active; using the clipboard');
       return false;
     }
 
+    // Reading the clipboard and saving take a moment, in which the user can
+    // switch terminals or close this one. The path does not follow them into
+    // whichever terminal is active by then.
+    if (terminal !== vscode.window.activeTerminal || terminal.exitStatus !== undefined) {
+      logger.debug('The terminal the paste started in is no longer active; using the clipboard');
+      return false;
+    }
+
     // `false` is `shouldExecute`: no newline is appended, so the path is typed
     // and nothing runs until the user says so.
-    terminal.sendText(toTerminalLine(text), false);
+    try {
+      terminal.sendText(toTerminalLine(text), false);
+    } catch (error) {
+      // A terminal disposed of meanwhile throws rather than takes the text,
+      // and the image is saved by now
+      logger.warn('Could not type into the terminal; using the clipboard', toErrorFields(error));
+      return false;
+    }
     logger.debug('Path sent to the terminal');
     return true;
   }
