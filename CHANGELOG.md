@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Saving never replaces an image that is already there. When the name is
+  taken, `${seq3}` moves on to the next free number, a pattern without it gets
+  `_1`, `_2`, … before the extension, and the path inserted is the name
+  actually saved. The new image used to be renamed over the old one: the
+  sequence number starts again at 1 every second, so with a pattern without
+  `${ss}`, such as `notes_${seq3}`, each paste in a later second replaced the
+  image before it. Two windows saving in the same second could do the same with
+  the default pattern.
 - A file name longer than the limit is shortened by its length in bytes, and
   never in the middle of a character. The limit counted UTF-16 units, so a long
   name in a non-Latin script could exceed what Linux and macOS file systems

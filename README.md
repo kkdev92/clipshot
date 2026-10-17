@@ -146,6 +146,11 @@ clipboard there as well. The image is saved either way.
 | `${ss}` | 2-digit second |
 | `${seq3}` | Sequence number, `clipshot.fileName.sequenceDigits` wide |
 
+Saving never replaces an existing file. If the name is taken — a pattern
+without `${ss}` repeats, as the sequence number counts within each second —
+`${seq3}` moves on to the next free number, and a pattern without it gets `_1`,
+`_2`, … before the extension. The path inserted is the name actually saved.
+
 ### Resizing
 
 `clipshot.resize.mode` is `off` by default. Set it to `fit` and images are
@@ -241,8 +246,8 @@ tool each platform provides:
 The image arrives as bytes, is written to a temporary file with a
 cryptographically random name, processed by [Sharp](https://sharp.pixelplumbing.com/)
 if resizing or a format change is called for, and moved into place under
-`clipshot.saveDirectory`. The temporary file is removed whether the paste
-succeeds or not.
+`clipshot.saveDirectory` without replacing any file already there. The
+temporary file is removed whether the paste succeeds or not.
 
 Activation, settings, logging and shutdown are handled by
 [@kkdev92/vscode-ext-kit](https://github.com/kkdev92/vscode-ext-kit): the

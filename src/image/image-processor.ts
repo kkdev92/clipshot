@@ -3,6 +3,7 @@
  * Handles format conversion, optimization, and metadata extraction
  */
 
+import * as path from 'path';
 import type { ImageFormat, ProcessedImage, ImageDimensions, ResizeMode, Logger } from '../core/types';
 import { ImageProcessingError, FileSizeLimitError } from '../core/errors';
 import { LIMITS } from '../core/constants';
@@ -164,8 +165,8 @@ export class ImageProcessor {
       throw new FileSizeLimitError(processedSizeMB, options.maxFileSizeMB);
     }
 
-    // Generate file name
-    const fileName = this.pathGenerator.generateFileName(
+    // Generate the file names to try, in order
+    const fileNames = this.pathGenerator.generateFileNames(
       fileNamePattern,
       options.format,
       undefined,
@@ -173,10 +174,12 @@ export class ImageProcessor {
     );
 
     // Generate save path
-    const savePath = this.pathGenerator.generateSavePath(saveDirectory, fileName);
+    const savePath = this.pathGenerator.generateSavePath(saveDirectory, fileNames(0));
 
-    // Write the file
-    const writeResult = await this.fileWriter.writeAtomic(savePath, processedBuffer);
+    // Write the file, under the first of the names that is free
+    const writeResult = await this.fileWriter.writeAtomic(savePath, processedBuffer, {
+      nextName: fileNames,
+    });
 
     // Generate relative path
     const relativePath = this.pathGenerator.generateRelativePath(writeResult.absolutePath);
@@ -189,7 +192,7 @@ export class ImageProcessor {
     return {
       absolutePath: writeResult.absolutePath,
       relativePath,
-      fileName,
+      fileName: path.basename(writeResult.absolutePath),
       fileSize: writeResult.fileSize,
       format: options.format,
       dimensions,

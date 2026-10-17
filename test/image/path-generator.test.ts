@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   PathGenerator,
   clearSequenceCache,
+  withNameSuffix,
 } from '../../src/image/path-generator';
 
 describe('PathGenerator', () => {
@@ -80,6 +81,70 @@ describe('PathGenerator', () => {
       const result = generator.generateFileName('image<>:test', 'png', date);
       // Should not contain dangerous characters
       expect(result).not.toMatch(/[<>:]/);
+    });
+  });
+
+  /**
+   * The names one save tries when the name before is taken
+   */
+  describe('generateFileNames', () => {
+    const date = new Date(2024, 0, 15, 14, 30, 45);
+
+    it('should start with the name generateFileName gives', () => {
+      const names = generator.generateFileNames('image_${seq3}', 'png', date);
+      clearSequenceCache();
+
+      expect(names(0)).toBe(generator.generateFileName('image_${seq3}', 'png', date));
+    });
+
+    it('should move the sequence on when the pattern has one', () => {
+      const names = generator.generateFileNames('image_${seq3}', 'png', date);
+
+      expect([names(0), names(1), names(2)]).toEqual([
+        'image_001.png',
+        'image_002.png',
+        'image_003.png',
+      ]);
+    });
+
+    it('should start from the number the sequence cache gives', () => {
+      generator.generateFileName('image_${seq3}', 'png', date);
+      const names = generator.generateFileNames('image_${seq3}', 'png', date);
+
+      expect([names(0), names(1)]).toEqual(['image_002.png', 'image_003.png']);
+    });
+
+    it('should add _1, _2 before the extension when the pattern has no sequence', () => {
+      const names = generator.generateFileNames('screenshot_${yyyy}${MM}${dd}', 'png', date);
+
+      expect([names(0), names(1), names(2)]).toEqual([
+        'screenshot_20240115.png',
+        'screenshot_20240115_1.png',
+        'screenshot_20240115_2.png',
+      ]);
+    });
+
+    it('should add a suffix when the length limit cuts the number off', () => {
+      // 200 characters fill the limit, so every number gives the same name
+      const names = generator.generateFileNames('a'.repeat(200) + '_${seq3}', 'png', date);
+
+      expect(names(0)).toBe('a'.repeat(200) + '.png');
+      expect(names(1)).toBe('a'.repeat(198) + '_1.png');
+    });
+  });
+
+  describe('withNameSuffix', () => {
+    it('should put the number before the extension', () => {
+      expect(withNameSuffix('image.png', 1)).toBe('image_1.png');
+      expect(withNameSuffix('image', 12)).toBe('image_12');
+    });
+
+    it('should shorten the name so the result stays within the limit', () => {
+      const result = withNameSuffix('画'.repeat(66) + '.png', 1);
+
+      // 66 kanji are 198 bytes, and "_1" needs 2 of the 200
+      expect(result).toBe('画'.repeat(66) + '_1.png');
+      expect(withNameSuffix('画'.repeat(66) + '.png', 10)).toBe('画'.repeat(65) + '_10.png');
     });
   });
 
