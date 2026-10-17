@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A file name longer than the limit is shortened by its length in bytes, and
+  never in the middle of a character. The limit counted UTF-16 units, so a long
+  name in a non-Latin script could exceed what Linux and macOS file systems
+  allow, and a cut through an emoji left half of it in the name.
+
 ## [0.9.2] - 2026-10-04
 
 ### Changed
