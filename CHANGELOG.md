@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-17
+
+**A paste never replaces an image that is already saved, and an image pasted
+into a document below the workspace root now shows.**
+
+A minor release, because what is inserted changes for some documents: Markdown
+and HTML references are relative to the document they are pasted into, so a
+document in a subfolder gets `../.clipshot/…` where it used to get a
+`./.clipshot/…` that did not resolve. A document at the workspace root, and a
+terminal, get the same text as before.
+
 ### Fixed
 
 - Saving never replaces an image that is already there. When the name is
@@ -563,7 +574,8 @@ Initial release.
   (PNG/JPEG/WebP) and quality.
 - Path validation and sanitization to keep saved files inside the workspace.
 
-[Unreleased]: https://github.com/kkdev92/clipshot/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/kkdev92/clipshot/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/kkdev92/clipshot/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/kkdev92/clipshot/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/kkdev92/clipshot/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/kkdev92/clipshot/compare/v0.8.0...v0.9.0
