@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `clipshot.fileName.sequenceDigits` sets the width of `${seq3}`, as the
   settings describe. The value was read and checked but never used, so the
   number always had three digits.
+- When the bundled `sharp` binary cannot load, the image is saved as the PNG or
+  JPEG the clipboard gave, with the matching extension. The clipboard's bytes
+  used to be saved under the extension of `clipshot.output.format` whatever
+  they were, so a PNG could be named `.jpeg` or `.webp`.
 
 ## [0.9.2] - 2026-10-04
 

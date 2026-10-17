@@ -6,7 +6,7 @@
 import * as path from 'path';
 import type { ImageFormat, ProcessedImage, ImageDimensions, ResizeMode, Logger } from '../core/types';
 import { ImageProcessingError, FileSizeLimitError } from '../core/errors';
-import { LIMITS } from '../core/constants';
+import { LIMITS, PNG_SIGNATURE, JPEG_SIGNATURE } from '../core/constants';
 import { PathGenerator } from './path-generator';
 import { FileWriter } from './file-writer';
 
@@ -45,24 +45,26 @@ type SharpModule = {
   };
 };
 
-let sharpModule: SharpModule | null = null;
-let sharpLoadAttempted = false;
+let sharpLoad: Promise<SharpModule | null> | null = null;
 let sharpLoadError: unknown = null;
 
 /**
  * Try to load Sharp module
+ *
+ * Every caller waits for the same attempt. A second call made while the first
+ * import was still running used to get no module, and so took the path for a
+ * Sharp that cannot load.
  */
-async function loadSharp(): Promise<SharpModule | null> {
-  if (sharpLoadAttempted) {
-    return sharpModule;
-  }
+function loadSharp(): Promise<SharpModule | null> {
+  sharpLoad ??= importSharp();
+  return sharpLoad;
+}
 
-  sharpLoadAttempted = true;
-
+async function importSharp(): Promise<SharpModule | null> {
   try {
     // Dynamic import to handle cases where Sharp is not available. No cast:
     // `bundler` resolution reads sharp's own types, which already match.
-    sharpModule = await import('sharp');
+    const sharpModule = await import('sharp');
 
     // Each paste runs a one-shot pipeline that never hits libvips'
     // operation cache; disable it so the long-lived extension host
@@ -152,7 +154,7 @@ export class ImageProcessor {
     }
 
     // Process the image
-    const { processedBuffer, dimensions } = await this.processImage(imageBuffer, options);
+    const { processedBuffer, dimensions, format } = await this.processImage(imageBuffer, options);
 
     this.logger?.debug('Image processed', {
       outputSize: processedBuffer.length,
@@ -165,10 +167,11 @@ export class ImageProcessor {
       throw new FileSizeLimitError(processedSizeMB, options.maxFileSizeMB);
     }
 
-    // Generate the file names to try, in order
+    // Generate the file names to try, in order, with the extension of the
+    // format actually written
     const fileNames = this.pathGenerator.generateFileNames(
       fileNamePattern,
-      options.format,
+      format,
       undefined,
       options.sequenceDigits
     );
@@ -194,7 +197,7 @@ export class ImageProcessor {
       relativePath,
       fileName: path.basename(writeResult.absolutePath),
       fileSize: writeResult.fileSize,
-      format: options.format,
+      format,
       dimensions,
     };
   }
@@ -207,17 +210,17 @@ export class ImageProcessor {
    *
    * @param buffer - Raw image data buffer
    * @param options - Processing options (format, quality)
-   * @returns Processed buffer and dimensions
+   * @returns Processed buffer, its dimensions, and the format it is in
    */
   private async processImage(
     buffer: Buffer,
     options: ImageProcessorOptions
-  ): Promise<{ processedBuffer: Buffer; dimensions: ImageDimensions | null }> {
+  ): Promise<{ processedBuffer: Buffer; dimensions: ImageDimensions | null; format: ImageFormat }> {
     const sharp = await loadSharp();
 
     if (sharp) {
       this.logger?.debug('Using Sharp for image processing');
-      return this.processWithSharp(sharp, buffer, options);
+      return { ...(await this.processWithSharp(sharp, buffer, options)), format: options.format };
     } else {
       this.logger?.debug('Sharp not available, using fallback processing');
       return this.processWithoutSharp(buffer, options);
@@ -340,20 +343,22 @@ export class ImageProcessor {
    * this method provides basic functionality:
    * - Validates the buffer contains a valid image
    * - Extracts PNG dimensions from header if possible
-   * - Passes through the original buffer without format conversion
+   * - Passes through the original buffer without format conversion, in the
+   *   format it is in
    *
    * Note: Format conversion and resize are NOT available in this mode.
    * The caller should check isSharpAvailable() and warn the user if needed.
    *
    * @param buffer - Raw image data buffer
-   * @param _options - Processing options (format conversion/resize not supported)
-   * @returns Original buffer and extracted dimensions (if PNG)
-   * @throws ImageProcessingError if buffer is not a valid image
+   * @param options - Processing options (format conversion/resize not supported)
+   * @returns Original buffer, extracted dimensions (if PNG), and its format
+   * @throws ImageProcessingError if buffer is not a valid image, or not one
+   *   that can be saved as it is
    */
   private processWithoutSharp(
     buffer: Buffer,
-    _options: ImageProcessorOptions
-  ): { processedBuffer: Buffer; dimensions: ImageDimensions | null } {
+    options: ImageProcessorOptions
+  ): { processedBuffer: Buffer; dimensions: ImageDimensions | null; format: ImageFormat } {
     // Without Sharp, we can only pass through the original buffer
     // Resize and format conversion are skipped - caller warned via isSharpAvailable()
     // Try to extract dimensions from PNG header if it's a PNG
@@ -364,9 +369,32 @@ export class ImageProcessor {
       throw new ImageProcessingError('Invalid image data', 'The clipboard data is not a valid image');
     }
 
-    // Note: Without Sharp, we can't convert formats
-    // The buffer is returned as-is
-    return { processedBuffer: buffer, dimensions };
+    // The buffer is returned as-is, so it is saved as the format it is in:
+    // named for the requested format, a PNG would sit behind a .jpeg extension
+    const format = this.detectFormat(buffer);
+    if (format === null) {
+      throw new ImageProcessingError(
+        'Sharp is not available, and the clipboard image is neither PNG nor JPEG',
+        'This image has to be converted to be saved, and the bundled sharp binary did not load'
+      );
+    }
+    if (format !== options.format) {
+      this.logger?.warn(`Saving the image as ${format}: converting it to ${options.format} needs Sharp`);
+    }
+    return { processedBuffer: buffer, dimensions, format };
+  }
+
+  /**
+   * The format a buffer is in, from its magic bytes, if it can be saved as it is
+   */
+  private detectFormat(buffer: Buffer): 'png' | 'jpeg' | null {
+    if (buffer.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) {
+      return 'png';
+    }
+    if (buffer.subarray(0, JPEG_SIGNATURE.length).equals(JPEG_SIGNATURE)) {
+      return 'jpeg';
+    }
+    return null;
   }
 
   /**

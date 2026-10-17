@@ -195,7 +195,7 @@ becomes token cost.
 
 - **A workspace folder must be open.** There is nowhere to save the image otherwise, and the extension says so rather than picking a directory for you
 - **Trusted workspaces only.** ClipShot writes files, which is not something to do in a window you have told VS Code not to trust
-- **Resizing needs the bundled `sharp` binary.** If it fails to load on your platform, the paste still works — the image is saved at its original size and the output channel says why
+- **Resizing and format conversion need the bundled `sharp` binary.** If it fails to load on your platform, the paste still works — the image is saved as the clipboard gave it, at its original size and as PNG or JPEG, and the output channel says why
 - **The clipboard is read through a platform tool** (see [How It Works](#how-it-works)); an application that puts an image on the clipboard in an unusual format may not be recognised
 - **One paste at a time.** A second paste while one is in flight is declined rather than queued
 
@@ -317,7 +317,7 @@ six.
 - **"No workspace folder open"**: ClipShot saves into the workspace, so it needs one. Open a folder and try again
 - **Path not inserted, but the image was saved**: Nothing had focus that ClipShot could write to. The path was copied to the clipboard instead — press `Ctrl+V`
 - **The path went into an editor instead of the terminal**: The routing depends on the `terminalFocus` keybinding ClipShot contributes. If you have rebound `Ctrl+Shift+V` in your own `keybindings.json`, bind it to `clipshot.pasteImage` with `"when": "terminalFocus"` and `"args": { "surface": "terminal" }` for the terminal case, and leave a second entry without a `when` for editors
-- **Images are not being resized**: Check `clipshot.resize.mode` is `fit`, then check the output channel — if the bundled `sharp` binary failed to load, resizing is skipped and the reason is logged
+- **Images are not being resized or converted**: For resizing, check `clipshot.resize.mode` is `fit`. Then check the output channel — if the bundled `sharp` binary failed to load, resizing and format conversion are skipped and the reason is logged
 - **`Ctrl+Shift+V` does nothing while the integrated terminal has focus**: A key press in the terminal belongs to the program running there unless the command is on `terminal.integrated.commandsToSkipShell`. ClipShot adds `clipshot.pasteImage` to that list the first time it activates. If the entry is not there — `clipshot.terminal.registerShortcut` is off, or the write did not go through — run **ClipShot: Enable Shortcut in Integrated Terminal** from the Command Palette, which reports what it found. An entry reading `-clipshot.pasteImage` is read as a deliberate opt-out and left alone
 - **Need more detail in the logs**: Open **View → Output → ClipShot**, then set the level in the panel's own dropdown or via `Developer: Set Log Level`. `clipshot.logLevel` is a *floor* on top of that: it can make the log quieter, but it cannot turn on output that VS Code's level is already filtering out
 

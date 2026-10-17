@@ -198,7 +198,7 @@ export class PasteHandler {
       const sharpAvailable = await sharpAvailablePromise;
       if (!sharpAvailable) {
         const loadError = getSharpLoadError();
-        logger.warn('Sharp is not available - resize will be skipped');
+        logger.warn('Sharp is not available - resize and format conversion will be skipped');
         if (loadError !== null && loadError !== undefined) {
           logger.error('Sharp failed to load', loadError, { context: 'sharp-load' });
         }
