@@ -45,6 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sent the path there. When that terminal is no longer the active one or has
   exited, the path now goes to the clipboard — as it does when the terminal
   cannot take the text, which used to fail the paste after the image was saved.
+- On Linux, `xclip` or `wl-clipboard` installed after a paste that found
+  neither is picked up by the next paste. Until the window was reloaded, every
+  paste reported the clipboard as unavailable.
 
 ## [0.9.2] - 2026-10-04
 
