@@ -12,6 +12,7 @@ tsconfig.json
 eslint.config.mjs
 vitest.config.ts
 esbuild.mjs
+osv-scanner.toml
 
 # Environment and secrets
 .env
