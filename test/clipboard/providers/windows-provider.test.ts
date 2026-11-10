@@ -7,16 +7,21 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
+import { mkdtempSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { promisify } from 'util';
 import {
   parseResultOutput,
   CLIPBOARD_SCRIPT,
+  POWERSHELL_ARGUMENTS,
   isARM64Windows,
   WindowsClipboardProvider,
 } from '../../../src/clipboard/providers/windows-provider';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 describe('WindowsClipboardProvider', () => {
   describe('parseResultOutput', () => {
@@ -288,6 +293,29 @@ describe('WindowsClipboardProvider', () => {
       );
 
       expect(stderr).toBe('');
+    });
+
+    it('should run the clipboard script when started the way the provider starts it', async () => {
+      if (process.platform !== 'win32') {
+        return;
+      }
+
+      // The same executable and argument array as the provider, without a
+      // shell: this is where an argument mangled on its way to PowerShell
+      // would show. Only reads the clipboard; an image on it lands in the
+      // temporary folder removed below.
+      const folder = mkdtempSync(join(tmpdir(), 'clipshot-test-'));
+      try {
+        const { stdout } = await execFileAsync('powershell.exe', [...POWERSHELL_ARGUMENTS], {
+          timeout: POWERSHELL_TIMEOUT_MS,
+          env: { ...process.env, CLIP_TEMP_PATH: join(folder, 'clipboard.png') },
+          windowsHide: true,
+        });
+
+        expect(stdout).toMatch(/^::RESULT::(True|False),(True|False),/m);
+      } finally {
+        rmSync(folder, { recursive: true, force: true });
+      }
     });
   });
 });
