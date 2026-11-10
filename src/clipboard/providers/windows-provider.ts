@@ -3,7 +3,7 @@
  * Uses PowerShell with Base64 encoding for secure execution
  */
 
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { ClipboardData } from '../../core/types';
 import { ClipboardError } from '../../core/errors';
@@ -12,10 +12,17 @@ import { BaseClipboardProvider } from '../clipboard-provider';
 import { encodePowerShellCommand } from '../../security/sanitizer';
 import { getTempFileManager } from '../../security/temp-file-manager';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
-// Cache PowerShell path to avoid repeated detection
-let cachedPowerShellPath: string | null = null;
+/**
+ * PowerShell executables, in the order they are tried.
+ *
+ * Windows PowerShell goes first: it is part of Windows, the script needs
+ * nothing newer than the .NET clipboard API that both have, and it starts
+ * sooner than PowerShell 7 does. PowerShell 7 is there for a machine where
+ * Windows PowerShell cannot be started, or does not get through the script.
+ */
+const POWERSHELL_EXECUTABLES = ['powershell.exe', 'pwsh'] as const;
 
 /**
  * PowerShell script to check if clipboard contains an image and save it to a temp file.
@@ -88,31 +95,49 @@ $image.Dispose()
 const EXECUTION_POLICY = 'RemoteSigned';
 
 /**
+ * The arguments PowerShell is started with. All of them are constant; the one
+ * value that changes per read, the temporary file, goes in the environment.
+ */
+const POWERSHELL_ARGUMENTS: readonly string[] = [
+  '-NoLogo',
+  '-NoProfile',
+  '-NonInteractive',
+  '-ExecutionPolicy',
+  EXECUTION_POLICY,
+  '-EncodedCommand',
+  encodePowerShellCommand(CLIPBOARD_SCRIPT),
+];
+
+/** Node ends a child that outlives `timeout`, and reports it as killed. */
+function isTimeout(error: unknown): boolean {
+  return (error as { killed?: boolean }).killed === true;
+}
+
+/** The executable is not on the PATH. */
+function isNotFound(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException).code === 'ENOENT';
+}
+
+/**
  * Windows clipboard provider using PowerShell
  */
 export class WindowsClipboardProvider extends BaseClipboardProvider {
   private readonly tempFileManager = getTempFileManager();
   private currentTempFile: string | null = null;
+  /** The executable that last read the clipboard, so later reads start with it. */
+  private powerShell: string | null = null;
 
   constructor() {
     super('windows');
   }
 
-  async isAvailable(): Promise<boolean> {
-    // pwsh also exists on Linux/macOS, but the WinForms clipboard does not
-    if (process.platform !== 'win32') {
-      return false;
-    }
-
-    try {
-      // Detecting the PowerShell executable doubles as the availability
-      // check, so a paste pays for at most one probe (cached afterwards)
-      // instead of an extra PowerShell startup per call.
-      await this.getPowerShellPath();
-      return true;
-    } catch {
-      return false;
-    }
+  isAvailable(): Promise<boolean> {
+    // Windows PowerShell is part of Windows, so there is nothing to look for
+    // first. Starting a PowerShell only to see that it starts took about as
+    // long as the read itself; a machine where none starts finds out from the
+    // read, which says so. (pwsh also exists on Linux and macOS, but the
+    // WinForms clipboard does not.)
+    return Promise.resolve(process.platform === 'win32');
   }
 
   async hasImage(): Promise<boolean> {
@@ -141,42 +166,70 @@ export class WindowsClipboardProvider extends BaseClipboardProvider {
       throw new ClipboardError('Temp file not initialized');
     }
 
-    // Encode the script for safe execution
-    const encodedCommand = encodePowerShellCommand(CLIPBOARD_SCRIPT);
+    // The executable that worked last time, or each candidate in turn. Nothing
+    // checks beforehand that one starts: the read is the check, so a paste
+    // costs one PowerShell startup rather than two.
+    const executables = this.powerShell !== null ? [this.powerShell] : POWERSHELL_EXECUTABLES;
 
-    // Get PowerShell path (prefer pwsh for ARM64)
-    const psPath = await this.getPowerShellPath();
-
-    try {
-      const { stdout, stderr } = await execAsync(
-        `"${psPath}" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy ${EXECUTION_POLICY} -EncodedCommand ${encodedCommand}`,
-        {
-          timeout: TIMEOUTS.CLIPBOARD_READ,
-          env: {
-            ...process.env,
-            CLIP_TEMP_PATH: this.currentTempFile,
-          },
-          windowsHide: true,
+    let failure: ClipboardError | null = null;
+    for (const executable of executables) {
+      try {
+        const data = await this.readWith(executable, this.currentTempFile);
+        this.powerShell = executable;
+        return data;
+      } catch (error) {
+        if (isTimeout(error)) {
+          // Waiting out a second timeout would only make the wait longer
+          throw new ClipboardError('Clipboard read timed out');
         }
-      );
-
-      // Ignore non-error stderr output:
-      // - WARNING: PowerShell warnings
-      // - CLIXML progress messages (contain '<Objs' with 'progress' type)
-      //   These occur during first-time .NET assembly loading
-      if (stderr && !this.isIgnorableStderr(stderr)) {
-        throw new ClipboardError(`PowerShell error: ${stderr}`);
+        if (!isNotFound(error)) {
+          // Of several failures, the first from a PowerShell that ran is the
+          // one worth reporting
+          failure ??= new ClipboardError(
+            `Failed to read clipboard: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
       }
-
-      return this.parseResult(stdout);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ETIMEDOUT') {
-        throw new ClipboardError('Clipboard read timed out');
-      }
-      throw new ClipboardError(
-        `Failed to read clipboard: ${error instanceof Error ? error.message : String(error)}`
-      );
     }
+
+    if (failure !== null) {
+      throw failure;
+    }
+
+    // None of them could be found. Forget the remembered one, so that the next
+    // read looks for all of them again.
+    this.powerShell = null;
+    throw new ClipboardError(
+      `PowerShell could not be started: ${executables.join(' and ')} not found`,
+      'PowerShell could not be started'
+    );
+  }
+
+  /**
+   * Run the clipboard script in one PowerShell and parse what it reports.
+   *
+   * The executable is started directly with an argument array, so no shell
+   * parses a command line in between.
+   */
+  private async readWith(executable: string, tempFile: string): Promise<ClipboardData> {
+    const { stdout, stderr } = await execFileAsync(executable, [...POWERSHELL_ARGUMENTS], {
+      timeout: TIMEOUTS.CLIPBOARD_READ,
+      env: {
+        ...process.env,
+        CLIP_TEMP_PATH: tempFile,
+      },
+      windowsHide: true,
+    });
+
+    // Ignore non-error stderr output:
+    // - WARNING: PowerShell warnings
+    // - CLIXML progress messages (contain '<Objs' with 'progress' type)
+    //   These occur during first-time .NET assembly loading
+    if (stderr && !this.isIgnorableStderr(stderr)) {
+      throw new ClipboardError(`PowerShell error: ${stderr}`);
+    }
+
+    return this.parseResult(stdout);
   }
 
   private parseResult(stdout: string): ClipboardData {
@@ -273,26 +326,6 @@ export class WindowsClipboardProvider extends BaseClipboardProvider {
     return false;
   }
 
-  private async getPowerShellPath(): Promise<string> {
-    // Return cached path if available
-    if (cachedPowerShellPath !== null) {
-      return cachedPowerShellPath;
-    }
-
-    // Check for PowerShell 7 (pwsh) first - better for ARM64
-    try {
-      await execAsync('pwsh -NoProfile -Command "echo ok"', { timeout: 5000 });
-      cachedPowerShellPath = 'pwsh';
-    } catch {
-      // Fall back to Windows PowerShell, but verify it actually runs so
-      // isAvailable() reports honestly (e.g. on non-Windows systems)
-      await execAsync('powershell.exe -NoProfile -Command "echo ok"', { timeout: 5000 });
-      cachedPowerShellPath = 'powershell.exe';
-    }
-
-    return cachedPowerShellPath;
-  }
-
   async cleanup(): Promise<void> {
     if (this.currentTempFile !== null && this.currentTempFile !== '') {
       await this.tempFileManager.cleanup(this.currentTempFile);
@@ -344,7 +377,8 @@ export function parseResultOutput(stdout: string): ParsedResultOutput {
 }
 
 /**
- * The PowerShell script used for clipboard operations.
+ * The PowerShell script used for clipboard operations, and the arguments
+ * PowerShell is started with to run it.
  * Exported for testing purposes.
  */
-export { CLIPBOARD_SCRIPT };
+export { CLIPBOARD_SCRIPT, POWERSHELL_ARGUMENTS };

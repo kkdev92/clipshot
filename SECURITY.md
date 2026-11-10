@@ -33,9 +33,9 @@ All shell commands are executed using:
 - **Environment Variables** for parameter passing
 
 ```typescript
-// Safe PowerShell execution
+// Safe PowerShell execution: a constant script, started without a shell
 const encoded = encodePowerShellCommand(script);
-const cmd = `powershell.exe -EncodedCommand ${encoded}`;
+execFile('powershell.exe', ['-NoProfile', '-EncodedCommand', encoded]);
 ```
 
 ### Path Traversal Prevention

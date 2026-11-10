@@ -47,13 +47,15 @@ export class ClipboardManager {
   /**
    * Check if the clipboard provider is available on the current system
    *
-   * Verifies that the platform-specific clipboard tool (PowerShell, osascript,
-   * xclip, or wl-paste) is installed and accessible.
+   * Verifies that the platform-specific clipboard tool (osascript, xclip, or
+   * wl-paste) is installed and accessible. Windows has nothing to look for —
+   * Windows PowerShell is part of it — so its provider answers without
+   * starting anything.
    *
    * A confirmed-available result is cached: the tools don't disappear
-   * mid-session, and re-probing costs a process spawn on every paste
-   * (a full PowerShell startup on Windows). Negative results are NOT
-   * cached so a missing tool can be installed without reloading.
+   * mid-session, and re-probing costs a process spawn on every paste.
+   * Negative results are NOT cached so a missing tool can be installed
+   * without reloading.
    *
    * @returns True if clipboard access is available, false otherwise
    */

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- On Windows, a paste starts PowerShell once, and starts it sooner. The
+  clipboard is read by Windows PowerShell, started directly. PowerShell 7 used
+  to be preferred when it was installed, although it takes longer to start;
+  the command went through `cmd.exe`; and the first paste in each window
+  started a PowerShell an extra time only to check that one runs. With
+  PowerShell 7 installed, the read took a third to a half less time on the two
+  machines it was measured on. PowerShell 7 is still used when Windows
+  PowerShell cannot be started or fails. macOS and Linux are unchanged.
+
 ## [0.10.0] - 2026-10-17
 
 **A paste never replaces an image that is already saved, and an image pasted
