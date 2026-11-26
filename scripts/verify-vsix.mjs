@@ -20,7 +20,7 @@
  *   node scripts/verify-vsix.mjs linux-x64    # Verify Linux x64 VSIX
  */
 
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import { existsSync, mkdirSync, rmSync, readdirSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
 import { fileURLToPath } from 'url';
@@ -88,13 +88,26 @@ function extractVsix(vsixPath, extractDir) {
   // VSIX is a ZIP file - use platform-appropriate unzip
   const isWindows = process.platform === 'win32';
   if (isWindows) {
-    execSync(`powershell -Command "Expand-Archive -Path '${vsixPath}' -DestinationPath '${extractDir}' -Force"`, {
+    // The tar.exe that ships with Windows reads zip archives under any extension.
+    // Expand-Archive is not used: Windows PowerShell started from Node inherits
+    // PowerShell 7's module path, and the Archive module it then loads can fail
+    // with an exit code of 0 and nothing extracted. The full path keeps another
+    // tar earlier on PATH, one that cannot read zip archives, from being used.
+    const tar = join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+    execFileSync(tar, ['-xf', vsixPath, '-C', extractDir], {
       stdio: 'pipe',
     });
   } else {
     execSync(`unzip -q "${vsixPath}" -d "${extractDir}"`, {
       stdio: 'pipe',
     });
+  }
+
+  // Every VSIX carries extension/package.json. Without it the archive was not
+  // unpacked, and the checks below would report every module as missing.
+  const manifestPath = join(extractDir, 'extension', 'package.json');
+  if (!existsSync(manifestPath)) {
+    throw new Error(`Extracting ${vsixPath} produced no extension/package.json`);
   }
 }
 
