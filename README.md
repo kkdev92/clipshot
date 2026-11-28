@@ -16,6 +16,8 @@ Images are processed on your machine and are never uploaded anywhere.
 
 ## Table of Contents
 
+Before reporting a problem or working on this project, read the [project guide](https://github.com/kkdev92/clipshot/blob/HEAD/PROJECT_GUIDE.md).
+
 - [Features](#features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
@@ -290,7 +292,7 @@ CI builds a VSIX for each of the six supported targets, unpacks it, checks that
 the `sharp` native binary that target needs is inside, and loads the module to
 confirm it works.
 
-For the full policy and for vulnerability reporting, see [SECURITY.md](SECURITY.md).
+For the full policy and for vulnerability reporting, see the [security section of the project guide](https://github.com/kkdev92/clipshot/blob/HEAD/PROJECT_GUIDE.md#security-and-private-reports).
 
 ---
 
@@ -365,24 +367,16 @@ Release notes are in [CHANGELOG.md](CHANGELOG.md).
 
 ## Contributing
 
-Contributions are welcome — thank you for helping make ClipShot better 🙌
-Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-If you're planning a larger change, opening an issue first is appreciated (it helps align direction and avoids duplicate work). Note that anything requiring a network round trip is out of scope by design.
+Start with the [project guide](https://github.com/kkdev92/clipshot/blob/HEAD/PROJECT_GUIDE.md) for development and verification. To submit an issue or pull request, see the [shared contribution guidelines](https://github.com/kkdev92/.github/blob/main/CONTRIBUTING.md).
 
 ---
 
 ## Support & Maintenance Policy
 
+For a bug report, follow the [reporting instructions](https://github.com/kkdev92/clipshot/blob/HEAD/PROJECT_GUIDE.md#reporting-a-problem).
+
 ClipShot is a personal hobby project maintained in spare time.
 The project is active, but support is best-effort: I'll do my best to review issues and PRs, and releases may be a bit slow sometimes — thank you for your patience.
-
-Helpful things when reporting bugs:
-
-- OS / architecture / VS Code version
-- The relevant `clipshot.*` settings
-- Output from **View → Output → ClipShot** with the level set to `debug`
-- What you copied, and from which application
 
 Security-related reports should follow [SECURITY.md](SECURITY.md).
 Really appreciate you using ClipShot 💛
