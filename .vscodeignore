@@ -26,6 +26,8 @@ work/**
 
 # Documentation (keep README)
 CONTRIBUTING.md
+PROJECT_GUIDE.md
+AGENTS.md
 SECURITY.md
 docs/**
 
